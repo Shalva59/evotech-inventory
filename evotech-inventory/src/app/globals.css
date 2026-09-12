@@ -1,26 +1,85 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+    /* Surfaces: slate-blue black. Each step is small — depth comes from
+       hairlines, not from shadows. */
+    --bg: 216 24% 6%;
+    --surface: 214 22% 9%;
+    --elevated: 214 20% 12%;
+    --line: 214 16% 18%;
+    --line-strong: 214 14% 26%;
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+    --fg: 213 25% 92%;
+    --muted: 214 12% 60%;
+    --faint: 214 10% 42%;
+
+    /* Brass — the identity colour. Primary actions, active nav, focus. */
+    --brass: 38 55% 52%;
+    --brass-hi: 40 62% 62%;
+    --brass-dim: 38 40% 18%;
+    --brass-fg: 36 60% 8%;
+
+    --jade: 158 46% 45%;
+    --jade-dim: 158 35% 14%;
+    --danger: 6 64% 57%;
+    --danger-dim: 6 45% 16%;
+    --info: 213 55% 62%;
+    --info-dim: 213 40% 16%;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  /* Numbers line up in columns everywhere — non-negotiable in a POS. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--brass));
+    outline-offset: 2px;
+  }
+
+  /* Hide number input spinners — quantity is driven by buttons and scanner */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--bg));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--line-strong));
+    border: 3px solid hsl(var(--bg));
+    border-radius: 99px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
 }
