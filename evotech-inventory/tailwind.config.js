@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
-  content: ["./src/app/**/*.{js,jsx}", "./src/components/**/*.{js,jsx}"],
+  content: ["./app/**/*.{js,jsx}", "./components/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
@@ -31,7 +31,15 @@ module.exports = {
         info: { DEFAULT: "hsl(var(--info))", dim: "hsl(var(--info-dim))" },
       },
       fontFamily: {
-        sans: ["var(--font-archivo)", "system-ui", "sans-serif"],
+        // Latin glyphs resolve to Archivo; Georgian ones fall through to Noto,
+        // so a bilingual label like "POS / სალარო" stays visually consistent.
+        sans: [
+          "var(--font-archivo)",
+          "var(--font-georgian)",
+          "system-ui",
+          "sans-serif",
+        ],
+        georgian: ["var(--font-georgian)", "system-ui", "sans-serif"],
         mono: ["var(--font-jetbrains)", "ui-monospace", "monospace"],
       },
       borderRadius: {
