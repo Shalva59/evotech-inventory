@@ -40,6 +40,7 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="ka"
+      suppressHydrationWarning
       className={`${archivo.variable} ${georgian.variable} ${jetbrains.variable}`}
     >
       <body className="font-sans">

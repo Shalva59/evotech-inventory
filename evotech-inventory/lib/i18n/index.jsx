@@ -55,6 +55,17 @@ export function I18nProvider({ children }) {
     return { lang, setLang, t, dict, ready };
   }, [lang, setLang, ready]);
 
+  // Nothing renders until the stored language is known.
+  //
+  // The server has no localStorage, so it always renders Georgian and its own
+  // clock. If the browser then picks English — or is simply a second later —
+  // React finds different text where it expected a match and throws a
+  // hydration error. Waiting one tick costs a frame and removes the entire
+  // class of bug, which matters here because *every* string is translated.
+  if (!ready) {
+    return <div className="min-h-screen bg-bg" aria-hidden />;
+  }
+
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
