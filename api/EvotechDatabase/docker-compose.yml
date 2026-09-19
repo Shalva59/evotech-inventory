@@ -1,0 +1,14 @@
+services:
+  evotech-db:
+    image: postgres:18
+    container_name: evotech-db
+    environment:
+      POSTGRES_PASSWORD: evotech
+      POSTGRES_DB: evotech
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:

@@ -1,0 +1,13 @@
+@EvoTech_HostAddress = http://localhost:4000
+
+### Anonymous — expect 200 {"status":"ok"}
+GET {{EvoTech_HostAddress}}/api/v1/ping/open
+Accept: application/json
+
+### Authenticated — expect 401 until step 5 issues tokens
+GET {{EvoTech_HostAddress}}/api/v1/ping/secure
+Accept: application/json
+
+### The OpenAPI document — the contract the frontend generates its client from
+GET {{EvoTech_HostAddress}}/openapi/v1.json
+Accept: application/json
