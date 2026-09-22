@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,7 +51,13 @@ const string FrontendCors = "frontend";
 //    registering what can be constructed later.
 // =====================================================================
 
-builder.Services.AddControllers();
+// AddJsonOptions: System.Text.Json binds enums as NUMBERS by default, so a
+// client would have to send {"kind": 0} instead of {"kind": "Purchase"}. The
+// database stores these as text and the API should read the same way, so the
+// string converter is registered globally.
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 // ---- Database ----
 // The connection string comes from DI, not from an OnConfiguring override in
