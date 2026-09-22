@@ -1,4 +1,6 @@
+using EvoTech.Api.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using System.Text;
@@ -33,6 +35,10 @@ var jwtAudience = builder.Configuration["Jwt:Audience"]
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? throw new InvalidOperationException("Cors:AllowedOrigins is not configured (appsettings.json).");
 
+var connectionString = builder.Configuration.GetConnectionString("Postgres")
+    ?? throw new InvalidOperationException(
+        "ConnectionStrings:Postgres is not configured. Run: dotnet user-secrets set \"ConnectionStrings:Postgres\" \"Host=...\"");
+
 // A named policy. Named rather than default so that when some endpoints
 // later need different rules you add a second policy instead of rewriting
 // this one.
@@ -44,6 +50,19 @@ const string FrontendCors = "frontend";
 // =====================================================================
 
 builder.Services.AddControllers();
+
+// ---- Database ----
+// The connection string comes from DI, not from an OnConfiguring override in
+// AppDbContext — that keeps the database choice out of the context class and
+// the credentials out of source control.
+//
+// UseSnakeCaseNamingConvention rewrites every table and column name:
+// MinStockThreshold becomes min_stock_threshold. Postgres folds unquoted
+// identifiers to lowercase, so without this EF would emit "MinStockThreshold"
+// in quotes and you would have to quote it forever in psql too.
+builder.Services.AddDbContext<AppDbContext>(options => options
+    .UseNpgsql(connectionString)
+    .UseSnakeCaseNamingConvention());
 
 // Generates the OpenAPI document at /openapi/v1.json in development.
 // This document is your contract with the frontend — your friend generates

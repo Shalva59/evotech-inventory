@@ -48,6 +48,11 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
                 "cost_price >= 0 AND sell_price >= 0");
             t.HasCheckConstraint("ck_product_min_stock_threshold_non_negative",
                 "min_stock_threshold >= 0");
+
+            // IsRequired() only emits NOT NULL, and '' passes NOT NULL. This
+            // is the constraint that actually makes a SKU mean something.
+            t.HasCheckConstraint("ck_product_sku_not_empty",
+                "sku <> ''");
         });
 
         builder.Property(p => p.IsArchived)
