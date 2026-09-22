@@ -130,26 +130,50 @@ const remote_reports = {
 const remote_products = {
   list: (params) => request("/products", { params }),
   lowStock: () => request("/products", { params: { lowStock: true } }),
+  get: (id) => request(`/products/${id}`),
   lookup: (code) => request("/products/lookup", { params: { code } }),
   create: (data) => request("/products", { method: "POST", body: data }),
   update: (id, data) => request(`/products/${id}`, { method: "PATCH", body: data }),
   remove: (id) => request(`/products/${id}`, { method: "DELETE" }),
+  /** Goods arriving: adds quantity, averages cost, optionally books the expense. */
+  receive: (id, data) => request(`/products/${id}/receive`, { method: "POST", body: data }),
 };
 
-const remote_classification = {
-  tree: () => request("/classification"),
-  createCategory: (name) => request("/classification/categories", { method: "POST", body: { name } }),
+const remote_categories = {
+  list: () => request("/categories"),
+  create: (data) => request("/categories", { method: "POST", body: data }),
+  update: (id, data) => request(`/categories/${id}`, { method: "PATCH", body: data }),
+  remove: (id) => request(`/categories/${id}`, { method: "DELETE" }),
   createSubcategory: (categoryId, name) =>
-    request("/classification/subcategories", { method: "POST", body: { categoryId, name } }),
-  createBrand: (subcategoryId, name) =>
-    request("/classification/brands", { method: "POST", body: { subcategoryId, name } }),
-  createModel: (brandId, name) =>
-    request("/classification/models", { method: "POST", body: { brandId, name } }),
+    request(`/categories/${categoryId}/subcategories`, { method: "POST", body: { name } }),
+  removeSubcategory: (id) => request(`/subcategories/${id}`, { method: "DELETE" }),
+};
+
+/** Accessory makers — Spigen, Baseus. Not tied to any category. */
+const remote_brands = {
+  list: () => request("/brands"),
+  create: (data) => request("/brands", { method: "POST", body: data }),
+  update: (id, data) => request(`/brands/${id}`, { method: "PATCH", body: data }),
+  remove: (id) => request(`/brands/${id}`, { method: "DELETE" }),
+};
+
+/** The phones and laptops a product fits. Many-to-many with products. */
+const remote_devices = {
+  list: () => request("/devices"),
+  create: (data) => request("/devices", { method: "POST", body: data }),
+  update: (id, data) => request(`/devices/${id}`, { method: "PATCH", body: data }),
+  remove: (id) => request(`/devices/${id}`, { method: "DELETE" }),
 };
 
 const remote_suppliers = {
   list: () => request("/suppliers"),
-  create: (name) => request("/suppliers", { method: "POST", body: { name } }),
+  create: (data) =>
+    request("/suppliers", {
+      method: "POST",
+      body: typeof data === "string" ? { name: data } : data,
+    }),
+  update: (id, data) => request(`/suppliers/${id}`, { method: "PATCH", body: data }),
+  remove: (id) => request(`/suppliers/${id}`, { method: "DELETE" }),
 };
 
 /* ------------------------------------------------------------------ */
@@ -250,7 +274,9 @@ export { request };
 export const auth = DEMO ? local.auth : remote_auth;
 export const reports = DEMO ? local.reports : remote_reports;
 export const products = DEMO ? local.products : remote_products;
-export const classification = DEMO ? local.classification : remote_classification;
+export const categories = DEMO ? local.categories : remote_categories;
+export const brands = DEMO ? local.brands : remote_brands;
+export const devices = DEMO ? local.devices : remote_devices;
 export const suppliers = DEMO ? local.suppliers : remote_suppliers;
 export const sales = DEMO ? local.sales : remote_sales;
 export const banks = DEMO ? local.banks : remote_banks;

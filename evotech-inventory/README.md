@@ -60,13 +60,57 @@ The dashboard shows zeros until then.
 | `/login` | PIN pad. Signing in records the arrival time and notifies the owner. |
 | `/` | Revenue, expenses, net profit, reinvestment budget, sales chart, low stock, activity |
 | `/pos` | Scanner, cart, discount, cash or card with the customer's bank |
-| `/inventory` | Product list and search |
-| `/inventory/new` | Add product — cascading classification, live margin |
+| `/inventory` | Product table, category tree on the left, add/edit in a modal, receive stock |
+| `/inventory/categories` | Category cards with their subcategories; open one to manage it, drag to reorder |
+| `/inventory/brands` | Accessory brands — name and logo |
+| `/inventory/devices` | The phones and laptops products fit |
+| `/inventory/suppliers` | Who the shop buys from |
 | `/expenses` | Fixed, stock and one-off spending; live profit equation |
 | `/employees` | Staff, their hours, and what each of them sold in the period |
 | `/employees/[id]` | One person: sales, commission, attendance history, schedule editor |
 | `/attendance` | Who arrived when, against their schedule |
 | `/settings` | Banks, grace period, Telegram, accounting basis, language |
+
+## The catalogue
+
+The shop sells accessories and repair parts, not phones, so a product carries
+two different ideas that are easy to confuse:
+
+- **Brand** — who made the accessory: Spigen, Baseus. Independent of category,
+  because Baseus makes chargers, cables and cases alike.
+- **Devices** — what it fits: iPhone 15, Galaxy S24. Zero, one, or many.
+  Searching "iPhone 15" in Inventory returns everything that fits it.
+
+The add-product window never closes on a stray click, only on Cancel or Save.
+Every dropdown has a "+" to create a missing category, brand or supplier
+inline. **Save and add next** keeps category, brand, supplier and devices and
+clears the rest, for entering a box of twenty similar items in a row.
+
+**Receive stock** adds quantity, re-averages the cost price across old and new
+stock, and — unless the goods came on credit — books the payment as a stock
+expense automatically.
+
+Categories are browsed as tiles with an icon and a colour rather than a
+photograph, since nobody will go hunting for a picture of "20W chargers" and
+a tile with nothing in it makes the whole page look unfinished. A photo can
+be added and becomes the tile's background. Tiles drag into whatever order
+the shop actually uses.
+
+Opening a tile shows its subcategories and a "show all" button; both lead to
+the product list with the filter in the URL, so the back button works and a
+filtered view can be bookmarked. The same filter is available as a tree
+beside the product list, with one control to open or close every branch.
+
+Products stay a table. A card grid was tried and removed: prices, cost and
+stock are numbers to compare down a column, and a wall of photographs makes
+that harder rather than easier.
+
+Category artwork is always contained inside a fixed square rather than filling
+the card. Shop logos are high-contrast by design, and a full-bleed red logo
+turns a card into a billboard with unreadable text on it. The category colour
+survives as a tinted square and a hairline on hover.
+
+Images are resized in the browser to 256px before they are stored.
 
 ## The period control
 

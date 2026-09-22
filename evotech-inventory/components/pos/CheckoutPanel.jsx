@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Banknote, CreditCard, Plus, Check, Loader2 } from "lucide-react";
 import { cn, money } from "@/lib/utils";
+import { Money } from "@/components/ui/money";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input, ToggleGroup } from "@/components/ui/field";
@@ -128,7 +129,7 @@ export function CheckoutPanel({ lines, banksQuery, onCheckout, pending }) {
       <div className="bg-surface px-4 py-3.5">
         <div className="flex items-baseline justify-between">
           <span className="text-[13px] text-muted">{t("pos.total")}</span>
-          <span className="tnum font-mono text-2xl text-fg">{money(total)}</span>
+          <Money value={total} className="text-2xl text-fg" />
         </div>
       </div>
 

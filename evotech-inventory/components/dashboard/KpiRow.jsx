@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { cn, money, compactMoney } from "@/lib/utils";
+import { cn, compactMoney } from "@/lib/utils";
+import { Money } from "@/components/ui/money";
 import { useI18n } from "@/lib/i18n";
 import { Skeleton } from "@/components/ui/state";
 
@@ -66,7 +67,7 @@ export function KpiRow({ summary, loading, reinvestPercent, onReinvestChange }) 
         {loading ? (
           <Skeleton className="mt-2 h-7 w-28" />
         ) : (
-          <p className="tnum mt-1.5 font-mono text-xl text-brass">{money(reinvest)}</p>
+          <Money value={reinvest} className="mt-1.5 block text-xl text-brass" />
         )}
 
         <div className="mt-2.5 flex gap-1">
@@ -111,15 +112,10 @@ function Cell({ label, value, meta, tone, emphasis, loading }) {
       {loading ? (
         <Skeleton className="mt-2 h-7 w-32" />
       ) : (
-        <p
-          className={cn(
-            "tnum mt-1.5 font-mono",
-            emphasis ? "text-2xl" : "text-xl",
-            toneClass
-          )}
-        >
-          {money(value)}
-        </p>
+        <Money
+          value={value}
+          className={cn("mt-1.5 block", emphasis ? "text-2xl" : "text-xl", toneClass)}
+        />
       )}
       {meta && !loading && <p className="mt-1.5 text-[10px] text-faint">{meta}</p>}
     </div>
