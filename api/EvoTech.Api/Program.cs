@@ -157,6 +157,22 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+// Apply pending migrations at startup — DEVELOPMENT ONLY.
+//
+// This is what lets `docker compose up` produce a working database with no
+// extra steps. It is deliberately not done in production: two instances
+// starting together would race each other, and an application that can alter
+// its own schema is a privilege you do not want a production process to hold.
+// There, migrations are applied by a deploy step with its own credentials.
+if (app.Environment.IsDevelopment())
+{
+    // The DbContext is scoped, and here we are outside any request, so a
+    // scope has to be created by hand.
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 // =====================================================================
 // 3. THE PIPELINE — ordered, and NOT validated for you.
 //

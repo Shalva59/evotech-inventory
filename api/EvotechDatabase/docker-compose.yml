@@ -1,3 +1,11 @@
+# Two ways to run this project:
+#
+#   docker compose up -d evotech-db      just Postgres — for local API development
+#   docker compose up                    everything, API included — no .NET SDK needed
+#
+# The second is what a teammate consuming the API wants: one command, no SDK,
+# no user-secrets, no migrations to run by hand.
+
 services:
   evotech-db:
     image: postgres:18
@@ -9,6 +17,50 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
+
+    # depends_on alone only waits for the CONTAINER to start, not for Postgres
+    # to accept connections. Without this the API starts first, fails to
+    # connect, and exits.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d evotech"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  evotech-api:
+    build:
+      context: ../EvoTech.Api
+      dockerfile: Dockerfile
+    container_name: evotech-api
+    restart: unless-stopped
+    environment:
+      # Development so OpenAPI, Scalar and the startup migrations are all on.
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+
+      # ASP.NET Core maps "__" in an env var to ":" in configuration, so these
+      # land exactly where Program.cs reads them — no code change — and they
+      # override appsettings.json.
+      #
+      # Host is `evotech-db`, the SERVICE NAME, not localhost. Inside a
+      # container, localhost means that container. Running the API on your own
+      # machine the same setting is localhost: both are correct, from
+      # different vantage points.
+      ConnectionStrings__Postgres: "Host=evotech-db;Port=5432;Database=evotech;Username=postgres;Password=evotech"
+
+      # Dev-only, and safe to commit precisely because it is worthless —
+      # nothing it signs is trusted anywhere. A real deployment injects this
+      # from a secret store.
+      Jwt__Key: "dev-only-signing-key-not-a-secret-32plus"
+    ports:
+      # The container listens on 8080; the host still sees 4000, so the
+      # frontend's NEXT_PUBLIC_API_URL and the CORS origin both stay as they
+      # were.
+      - "4000:8080"
+    depends_on:
+      evotech-db:
+        condition: service_healthy
 
 volumes:
   pgdata:

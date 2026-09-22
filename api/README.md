@@ -5,8 +5,9 @@ PostgreSQL 18 in Docker, EF Core 10, JWT bearer auth.
 
 ```
 api/
-  EvotechDatabase/docker-compose.yml   Postgres container
+  EvotechDatabase/docker-compose.yml   Postgres + the API, both containerised
   EvoTech.Api/
+    Dockerfile                         builds the API image
     Program.cs                         config, services, pipeline
     Domain/                            plain entities — no EF references
     Data/
@@ -25,22 +26,50 @@ detail lives in `Data/Configurations/`.
 
 ## Running it
 
+There are two ways in. Pick by what you are doing, not by preference.
+
+### A. Just consuming the API — everything in Docker
+
+For the frontend developer, or anyone who wants the API running without
+touching C#. **Docker Desktop is the only prerequisite** — no .NET SDK, no
+`dotnet-ef`, no secrets to configure.
+
 ```bash
-cd api/EvotechDatabase && docker compose up -d
+cd api/EvotechDatabase && docker compose up
+```
+
+That builds the API image, starts Postgres, waits for it to report healthy,
+then starts the API — which applies any pending migrations on startup. A clean
+clone gets a working database with no extra steps.
+
+- API: http://localhost:4000
+- Scalar UI: http://localhost:4000/scalar/v1
+- OpenAPI document: http://localhost:4000/openapi/v1.json
+
+The database starts **empty**. Create a brand, then a category, then a product
+— products need both ids.
+
+Add `--build` after changing C#, otherwise Compose reuses the cached image.
+
+### B. Working on the API — Postgres in Docker, API locally
+
+Rebuilding an image per change is too slow to develop against, so run only the
+database in Docker:
+
+```bash
+cd api/EvotechDatabase && docker compose up -d evotech-db
 ```
 
 ```bash
 cd api/EvoTech.Api && dotnet run --launch-profile http
 ```
 
-- API: http://localhost:4000
-- OpenAPI document: http://localhost:4000/openapi/v1.json
-- Scalar UI: http://localhost:4000/scalar/v1
-
 Use the `http` launch profile, **not** `IIS Express` — that one runs on a
 different port and the frontend's calls to :4000 will go nowhere.
 
-## First-time setup
+This path needs first-time setup (below); mode A does not.
+
+### First-time setup — mode B only
 
 Secrets live in user-secrets, never in `appsettings.json`:
 
@@ -53,6 +82,31 @@ dotnet user-secrets set "ConnectionStrings:Postgres" "Host=localhost;Port=5432;D
 ```
 
 Then `dotnet ef database update` to build the schema.
+
+Note the host differs between the two modes: `localhost` running on your
+machine, `evotech-db` from inside a container — because inside a container,
+`localhost` means *that container*. Both are correct from their own vantage
+point. Compose supplies its value as the `ConnectionStrings__Postgres`
+environment variable; ASP.NET Core maps `__` to `:`, so it overrides
+`appsettings.json` with no code change.
+
+### Migrations on startup
+
+`Program.cs` calls `Database.MigrateAsync()` **when the environment is
+Development**, which is what makes mode A a single command. It is deliberately
+not done in production: two instances starting together race each other, and an
+application that can alter its own schema is a privilege a production process
+should not hold. There, migrations are a deploy step with their own credentials.
+
+### A harmless log line
+
+```
+Error: libgssapi_krb5.so.2: cannot open shared object file
+```
+
+Npgsql probing for Kerberos support that the slim runtime image does not carry.
+Authentication here is by password, the connection succeeds, and nothing is
+wrong — it is just printed by the native loader as "Error".
 
 ---
 
@@ -128,9 +182,12 @@ Run from `api/EvotechDatabase/`.
 
 | Command | |
 |---|---|
-| `docker compose up -d` | Start Postgres |
+| `docker compose up` | Start **everything** — Postgres and the API |
+| `docker compose up -d evotech-db` | Start **only** Postgres, for local API development |
+| `docker compose up --build` | Rebuild the API image after changing C# |
 | `docker compose ps` | Running? Healthy? |
-| `docker compose logs -f evotech-db` | Follow the server log |
+| `docker compose logs -f evotech-api` | Follow the API log |
+| `docker compose logs -f evotech-db` | Follow the Postgres log |
 | `docker compose down` | Stop. **Data survives** |
 | `docker compose down -v` | Stop and delete the volume. **Data gone** |
 | `docker exec -it evotech-db psql -U postgres -d evotech` | psql shell in the container |
