@@ -58,7 +58,7 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
         // Restrict: a product with history cannot be deleted. IsArchived is
         // how a product leaves the catalogue.
         builder.HasOne(m => m.Product)
-            .WithMany()
+            .WithMany(p => p.Movements)
             .HasForeignKey(m => m.ProductId)
             .OnDelete(DeleteBehavior.Restrict);
 

@@ -1,4 +1,5 @@
 using EvoTech.Api.Data;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -63,6 +64,12 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<AppDbContext>(options => options
     .UseNpgsql(connectionString)
     .UseSnakeCaseNamingConvention());
+
+// Scans this assembly and registers every AbstractValidator<T> as IValidator<T>.
+// NOTE: registering a validator does NOT make it run. Nothing in the pipeline
+// invokes them — the old FluentValidation.AspNetCore auto-validation package is
+// deprecated. Controllers call ApiController.ValidateAsync explicitly.
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 // Generates the OpenAPI document at /openapi/v1.json in development.
 // This document is your contract with the frontend — your friend generates
