@@ -3,6 +3,10 @@
 ASP.NET Core 10 Web API backing the EVOTECH shop frontend.
 PostgreSQL 18 in Docker, EF Core 10, JWT bearer auth.
 
+> **Just want it running to develop the frontend against?**
+> See [GETTING-STARTED.md](GETTING-STARTED.md) — Docker Desktop and two
+> commands, no .NET needed. This file is for working *on* the API.
+
 ```
 api/
   EvotechDatabase/docker-compose.yml   Postgres + the API, both containerised
