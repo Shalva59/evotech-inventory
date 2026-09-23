@@ -69,11 +69,28 @@ CREATE INDEX attendance_date_idx ON attendance (work_date DESC);
 
 -- ------------------------------------------------------------
 -- Catalogue
+--
+-- The shop sells accessories and repair parts, not phones. So a product
+-- has two different "brands" and they must not be confused:
+--   brands   — who made the accessory (Spigen, Baseus). Independent of
+--              category: Baseus makes chargers, cables and cases.
+--   devices  — what it fits (iPhone 15, Galaxy S24). Many-to-many: a
+--              USB-C cable fits hundreds, a screwdriver set fits none.
 -- ------------------------------------------------------------
 
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE categories (
-  id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL UNIQUE
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        text NOT NULL UNIQUE,
+  description text NOT NULL DEFAULT '',
+  image       text,            -- optional thumbnail (frontend resizes to 256px)
+  -- The catalogue tiles. An icon key and a colour key from the frontend's
+  -- fixed sets, because a shop owner will not find a photograph for
+  -- "20W chargers" and a tile with nothing in it looks broken.
+  icon        text NOT NULL DEFAULT 'package',
+  color       text,
+  sort_order  integer NOT NULL DEFAULT 0   -- owner drags the tiles around
 );
 
 CREATE TABLE subcategories (
@@ -83,54 +100,78 @@ CREATE TABLE subcategories (
   UNIQUE (category_id, name)
 );
 
+-- A brand is a name and a logo. Country, website and notes were tried and
+-- removed: nobody in a shop looks them up, and every unused field is one
+-- more blank box in the way of entering the next brand.
 CREATE TABLE brands (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  subcategory_id uuid NOT NULL REFERENCES subcategories(id) ON DELETE CASCADE,
-  name           text NOT NULL,
-  UNIQUE (subcategory_id, name)
+  id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  logo text
 );
 
-CREATE TABLE models (
-  id       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id uuid NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
-  name     text NOT NULL,
-  UNIQUE (brand_id, name)
+CREATE TABLE devices (
+  id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name  text NOT NULL UNIQUE,   -- "iPhone 15 Pro"
+  maker text NOT NULL DEFAULT '' -- "Apple"; groups the list
 );
 
 CREATE TABLE suppliers (
-  id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name    text NOT NULL UNIQUE,
-  phone   text,
-  note    text
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name           text NOT NULL UNIQUE,
+  phone          text NOT NULL DEFAULT '',
+  contact_person text NOT NULL DEFAULT '',
+  note           text NOT NULL DEFAULT ''
 );
 
 CREATE TABLE products (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name                text NOT NULL,
-  barcode             text UNIQUE,
-  sku                 text UNIQUE,
-  category_id         uuid REFERENCES categories(id),
-  subcategory_id      uuid REFERENCES subcategories(id),
-  brand_id            uuid REFERENCES brands(id),
-  model_id            uuid REFERENCES models(id),
+  barcode             text,
+  sku                 text,
+  -- RESTRICT, not CASCADE: deleting a category must never silently take
+  -- products with it. The API answers 409 and the owner moves them first.
+  category_id         uuid REFERENCES categories(id)    ON DELETE RESTRICT,
+  subcategory_id      uuid REFERENCES subcategories(id) ON DELETE RESTRICT,
+  brand_id            uuid REFERENCES brands(id)        ON DELETE RESTRICT,
+  supplier_id         uuid REFERENCES suppliers(id)     ON DELETE RESTRICT,
+  -- Weighted average across every receipt of stock. See POST /receive.
   cost_price          numeric(12,2) NOT NULL DEFAULT 0,
   sell_price          numeric(12,2) NOT NULL DEFAULT 0,
   quantity            integer NOT NULL DEFAULT 0,
   min_stock_threshold integer NOT NULL DEFAULT 0,
-  supplier_id         uuid REFERENCES suppliers(id),
   image_url           text,
   archived            boolean NOT NULL DEFAULT false,
   created_at          timestamptz NOT NULL DEFAULT now(),
   updated_at          timestamptz NOT NULL DEFAULT now()
 );
 
--- The till hits this index on every scan, so it has to be exact-match fast.
-CREATE INDEX products_barcode_idx ON products (barcode);
+-- Barcodes are unique among live products only, so an archived item's
+-- code can be reused by its replacement.
+CREATE UNIQUE INDEX products_barcode_live ON products (barcode) WHERE NOT archived;
+CREATE UNIQUE INDEX products_sku_live     ON products (sku)     WHERE NOT archived AND sku IS NOT NULL;
 CREATE INDEX products_name_trgm_idx ON products USING gin (name gin_trgm_ops);
--- requires: CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX products_low_stock_idx ON products (quantity) WHERE NOT archived;
 
-CREATE INDEX products_low_stock_idx
-  ON products (quantity) WHERE NOT archived;
+-- Compatibility. Deleting a device removes it from lists; products stay.
+CREATE TABLE product_devices (
+  product_id uuid NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  device_id  uuid NOT NULL REFERENCES devices(id)  ON DELETE CASCADE,
+  PRIMARY KEY (product_id, device_id)
+);
+
+CREATE INDEX product_devices_device_idx ON product_devices (device_id);
+
+-- Every arrival of goods, kept so cost history can be audited later.
+CREATE TABLE stock_receipts (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id   uuid NOT NULL REFERENCES products(id),
+  supplier_id  uuid REFERENCES suppliers(id),
+  qty          integer NOT NULL CHECK (qty > 0),
+  unit_cost    numeric(12,2) NOT NULL,
+  expense_id   uuid,           -- set when "record as expense" was ticked
+  received_by  uuid REFERENCES employees(id),
+  received_at  timestamptz NOT NULL DEFAULT now()
+);
 
 -- ------------------------------------------------------------
 -- Payment methods the customer can use

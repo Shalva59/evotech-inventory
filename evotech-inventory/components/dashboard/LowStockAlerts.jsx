@@ -58,7 +58,7 @@ function List({ items }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] text-fg">{item.name}</span>
                   <span className="block truncate text-[10px] text-faint">
-                    {[item.brand, item.model].filter(Boolean).join(" · ")}
+                    {[item.brand, item.devices?.[0]?.name].filter(Boolean).join(" · ")}
                   </span>
                 </span>
                 <span

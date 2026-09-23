@@ -52,12 +52,17 @@ module.exports = {
         "2xs": ["11px", { lineHeight: "16px" }],
       },
       keyframes: {
+        "modal-in": {
+          from: { opacity: "0", transform: "translateY(8px) scale(0.985)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
         "pulse-line": {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.45" },
         },
       },
       animation: {
+        "modal-in": "modal-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1)",
         "pulse-line": "pulse-line 2.4s ease-in-out infinite",
       },
     },

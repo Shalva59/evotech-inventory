@@ -13,6 +13,7 @@ import { expenses as expensesApi, reports } from "@/lib/api";
 import { RANGE_KINDS, resolveRange, toDateKey } from "@/lib/dates";
 import { useI18n } from "@/lib/i18n";
 import { cn, money } from "@/lib/utils";
+import { Money } from "@/components/ui/money";
 
 const TYPES = [
   { id: "fixed", labelKey: "expenses.fixed", color: "bg-info" },
@@ -71,14 +72,12 @@ export default function ExpensesPage() {
         {/* The whole point of this screen, stated as one sentence. */}
         <Panel>
           <PanelHeader title={t("expenses.equation")} />
-          <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-2 font-mono">
-            <span className="tnum text-xl text-fg">{money(revenue)}</span>
+          <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-2">
+            <Money value={revenue} className="text-xl text-fg" />
             <span className="text-muted">−</span>
-            <span className="tnum text-xl text-info">{money(byType.total ?? 0)}</span>
+            <Money value={byType.total ?? 0} className="text-xl text-info" />
             <span className="text-muted">=</span>
-            <span className={cn("tnum text-2xl", net < 0 ? "text-danger" : "text-jade")}>
-              {money(net)}
-            </span>
+            <Money value={net} className={cn("text-2xl", net < 0 ? "text-danger" : "text-jade")} />
           </div>
 
           <ProportionBar revenue={revenue} byType={byType} net={net} />

@@ -1,7 +1,8 @@
 "use client";
 
 import { Minus, Plus, Trash2, ShoppingCart } from "lucide-react";
-import { cn, money } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { Money } from "@/components/ui/money";
 import { useI18n } from "@/lib/i18n";
 import { EmptyState } from "@/components/ui/state";
 
@@ -76,11 +77,11 @@ export function CartTable({ lines, onChangeQty, onRemove }) {
                     </button>
                   </div>
                 </td>
-                <td className="tnum hidden px-4 py-3 text-right font-mono text-[13px] text-muted sm:table-cell">
-                  {money(line.unitPrice)}
+                <td className="hidden px-4 py-3 text-right sm:table-cell">
+                  <Money value={line.unitPrice} className="text-[13px] text-muted" />
                 </td>
-                <td className="tnum px-4 py-3 text-right font-mono text-[13px] text-fg">
-                  {money(line.unitPrice * line.qty)}
+                <td className="px-4 py-3 text-right">
+                  <Money value={line.unitPrice * line.qty} className="text-[13px] text-fg" />
                 </td>
                 <td className="pr-3">
                   <button

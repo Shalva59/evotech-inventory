@@ -21,7 +21,8 @@ const EMPTY_DB = {
   categories: [],
   subcategories: [],
   brands: [],
-  models: [],
+  brandsV2: [],
+  devices: [],
   suppliers: [],
   products: [],
   banks: [
@@ -78,7 +79,8 @@ export function resetLocalData() {
 }
 
 function id() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  if (typeof crypto !== "undefined" && crypto.randomUUID)
+    return crypto.randomUUID();
   return `id-${Math.random().toString(36).slice(2, 11)}`;
 }
 
@@ -95,7 +97,9 @@ function fail(message, status) {
 function within(iso, range) {
   if (!range?.from || !range?.to) return true;
   const t = new Date(iso).getTime();
-  return t >= new Date(range.from).getTime() && t < new Date(range.to).getTime();
+  return (
+    t >= new Date(range.from).getTime() && t < new Date(range.to).getTime()
+  );
 }
 
 function pad(n) {
@@ -113,17 +117,6 @@ function minutesLate(scheduledStart, arrived) {
   const due = new Date(arrived);
   due.setHours(h, m, 0, 0);
   return Math.round((new Date(arrived) - due) / 60000);
-}
-
-/** Product rows carry both ids (for the form) and names (for the tables). */
-function decorateProduct(db, product) {
-  return {
-    ...product,
-    category: db.categories.find((c) => c.id === product.categoryId)?.name ?? null,
-    subcategory: db.subcategories.find((s) => s.id === product.subcategoryId)?.name ?? null,
-    brand: db.brands.find((b) => b.id === product.brandId)?.name ?? null,
-    model: db.models.find((m) => m.id === product.modelId)?.name ?? null,
-  };
 }
 
 function logActivity(db, entry) {
@@ -150,7 +143,7 @@ export const auth = {
       const now = new Date();
       const today = dateKey(now);
       let record = db.attendance.find(
-        (a) => a.employeeId === person.id && a.date === today
+        (a) => a.employeeId === person.id && a.date === today,
       );
 
       // Refreshing the page at 15:00 must not reset this morning's arrival.
@@ -217,13 +210,13 @@ export const auth = {
       if (person) {
         const today = dateKey(new Date());
         const record = db.attendance.find(
-          (a) => a.employeeId === person.id && a.date === today
+          (a) => a.employeeId === person.id && a.date === today,
         );
         if (record && !record.clockOut) {
           const now = new Date();
           record.clockOut = now.toISOString();
           record.minutesWorked = Math.round(
-            (now - new Date(record.clockIn)) / 60000
+            (now - new Date(record.clockIn)) / 60000,
           );
           logActivity(db, { kind: "clock_out", description: person.fullName });
         }
@@ -242,7 +235,9 @@ export const reports = {
   async summary(range) {
     const db = read();
     const sales = db.sales.filter((s) => within(s.soldAt, range));
-    const expenses = db.expenses.filter((e) => within(`${e.date}T12:00:00`, range));
+    const expenses = db.expenses.filter((e) =>
+      within(`${e.date}T12:00:00`, range),
+    );
 
     const revenue = sales.reduce((sum, s) => sum + s.total, 0);
     const byType = { fixed: 0, stock: 0, oneoff: 0 };
@@ -348,46 +343,103 @@ export const reports = {
 };
 
 /* ------------------------------------------------------------------ */
-/* Products and classification                                         */
+/* Catalogue                                                           */
+/*                                                                     */
+/* Brand is independent of category: Baseus makes chargers, cables and */
+/* cases. Compatibility is a list of devices, because a USB-C cable     */
+/* fits a hundred phones and a screwdriver set fits none.               */
 /* ------------------------------------------------------------------ */
+
+function decorateProduct(db, product) {
+  const deviceIds = product.deviceIds ?? [];
+  return {
+    ...product,
+    deviceIds,
+    category:
+      db.categories.find((c) => c.id === product.categoryId)?.name ?? null,
+    subcategory:
+      db.subcategories.find((s) => s.id === product.subcategoryId)?.name ??
+      null,
+    brand: db.brandsV2.find((b) => b.id === product.brandId)?.name ?? null,
+    brandLogo: db.brandsV2.find((b) => b.id === product.brandId)?.logo ?? null,
+    supplier:
+      db.suppliers.find((s) => s.id === product.supplierId)?.name ?? null,
+    devices: deviceIds
+      .map((deviceId) => db.devices.find((d) => d.id === deviceId))
+      .filter(Boolean)
+      .map((d) => ({ id: d.id, name: d.name, maker: d.maker })),
+  };
+}
+
+function liveProducts(db) {
+  return db.products.filter((p) => !p.archived);
+}
 
 export const products = {
   async list(params) {
     const db = read();
-    let rows = db.products.filter((p) => !p.archived);
+    let rows = liveProducts(db).map((p) => decorateProduct(db, p));
 
     if (params?.lowStock) {
       rows = rows.filter((p) => p.quantity <= (p.minStockThreshold ?? 0));
     }
+    if (params?.categoryId)
+      rows = rows.filter((p) => p.categoryId === params.categoryId);
+    if (params?.subcategoryId)
+      rows = rows.filter((p) => p.subcategoryId === params.subcategoryId);
+    if (params?.brandId)
+      rows = rows.filter((p) => p.brandId === params.brandId);
     if (params?.search) {
       const q = params.search.toLowerCase();
+      // Typing "iPhone 15" finds every case, glass and cable that fits it.
       rows = rows.filter((p) =>
-        [p.name, p.barcode, p.sku].some((field) => field?.toLowerCase().includes(q))
+        [
+          p.name,
+          p.barcode,
+          p.sku,
+          p.brand,
+          ...p.devices.map((d) => d.name),
+        ].some((field) => field?.toLowerCase().includes(q)),
       );
     }
-    return rows.map((p) => decorateProduct(db, p));
+    return rows;
   },
 
   async lowStock() {
     return products.list({ lowStock: true });
   },
 
+  async get(productId) {
+    const db = read();
+    const found = db.products.find((p) => p.id === productId);
+    if (!found) throw fail("Not found", 404);
+    return decorateProduct(db, found);
+  },
+
   async lookup(code) {
     const db = read();
     const needle = code.toLowerCase();
+    const live = liveProducts(db);
     const found =
-      db.products.find((p) => p.barcode?.toLowerCase() === needle) ??
-      db.products.find((p) => p.sku?.toLowerCase() === needle) ??
-      db.products.find((p) => p.name.toLowerCase().includes(needle));
+      live.find((p) => p.barcode?.toLowerCase() === needle) ??
+      live.find((p) => p.sku?.toLowerCase() === needle) ??
+      live.find((p) => p.name.toLowerCase().includes(needle));
     if (!found) throw fail("Not found", 404);
     return decorateProduct(db, found);
   },
 
   async create(data) {
     return mutate((db) => {
+      if (
+        data.barcode &&
+        liveProducts(db).some((p) => p.barcode === data.barcode)
+      ) {
+        throw fail(`Barcode ${data.barcode} already exists`, 409);
+      }
       const product = {
         id: id(),
         archived: false,
+        deviceIds: [],
         createdAt: new Date().toISOString(),
         ...data,
       };
@@ -401,6 +453,14 @@ export const products = {
     return mutate((db) => {
       const product = db.products.find((p) => p.id === productId);
       if (!product) throw fail("Not found", 404);
+      if (
+        data.barcode &&
+        liveProducts(db).some(
+          (p) => p.id !== productId && p.barcode === data.barcode,
+        )
+      ) {
+        throw fail(`Barcode ${data.barcode} already exists`, 409);
+      }
       Object.assign(product, data);
       return decorateProduct(db, product);
     });
@@ -408,71 +468,272 @@ export const products = {
 
   async remove(productId) {
     return mutate((db) => {
+      // Archived, not deleted: last month's receipts still point at it.
       const product = db.products.find((p) => p.id === productId);
       if (product) product.archived = true;
       return null;
     });
   },
+
+  /**
+   * Goods arriving. Cost becomes the weighted average of what is on the
+   * shelf and what just came in, so a cheaper second batch does not make
+   * the first batch look like it was bought cheaply too.
+   */
+  async receive(productId, { qty, unitCost, supplierId, recordExpense }) {
+    return mutate((db) => {
+      const product = db.products.find((p) => p.id === productId);
+      if (!product) throw fail("Not found", 404);
+
+      const onHand = Math.max(0, product.quantity);
+      const oldCost = product.costPrice ?? 0;
+      product.costPrice =
+        onHand + qty > 0
+          ? (onHand * oldCost + qty * unitCost) / (onHand + qty)
+          : unitCost;
+      product.costPrice = Math.round(product.costPrice * 100) / 100;
+      product.quantity = product.quantity + qty;
+      if (supplierId) product.supplierId = supplierId;
+
+      const supplierName =
+        db.suppliers.find((s) => s.id === supplierId)?.name ?? null;
+
+      logActivity(db, {
+        kind: "stock_in",
+        description: `${product.name} × ${qty}`,
+        amount: qty * unitCost,
+      });
+
+      if (recordExpense) {
+        db.expenses.unshift({
+          id: id(),
+          type: "stock",
+          description: `${product.name} × ${qty}`,
+          amount: Math.round(qty * unitCost * 100) / 100,
+          paidTo: supplierName,
+          date: dateKey(new Date()),
+        });
+      }
+
+      return decorateProduct(db, product);
+    });
+  },
 };
 
-export const classification = {
-  async tree() {
-    const db = read();
-    return db.categories.map((category) => ({
-      ...category,
-      subcategories: db.subcategories
-        .filter((s) => s.categoryId === category.id)
-        .map((subcategory) => ({
-          ...subcategory,
-          brands: db.brands
-            .filter((b) => b.subcategoryId === subcategory.id)
-            .map((brand) => ({
-              ...brand,
-              models: db.models.filter((m) => m.brandId === brand.id),
-            })),
-        })),
-    }));
-  },
+function countBy(db, key, value) {
+  return liveProducts(db).filter((p) => p[key] === value).length;
+}
 
-  async createCategory(name) {
+export const categories = {
+  async list() {
+    const db = read();
+    return [...db.categories]
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map((category) => ({
+        ...category,
+        productCount: countBy(db, "categoryId", category.id),
+        subcategories: db.subcategories
+          .filter((s) => s.categoryId === category.id)
+          .map((s) => ({
+            ...s,
+            productCount: countBy(db, "subcategoryId", s.id),
+          })),
+      }));
+  },
+  async create(data) {
     return mutate((db) => {
-      const row = { id: id(), name };
+      if (
+        db.categories.some(
+          (c) => c.name.toLowerCase() === data.name.toLowerCase(),
+        )
+      ) {
+        throw fail(`"${data.name}" already exists`, 409);
+      }
+      const row = {
+        id: id(),
+        description: "",
+        image: null,
+        icon: "package",
+        color: null,
+        sortOrder: db.categories.length,
+        ...data,
+      };
       db.categories.push(row);
+      return { ...row, subcategories: [], productCount: 0 };
+    });
+  },
+  async update(categoryId, data) {
+    return mutate((db) => {
+      const row = db.categories.find((c) => c.id === categoryId);
+      if (!row) throw fail("Not found", 404);
+      Object.assign(row, data);
       return row;
+    });
+  },
+  async remove(categoryId) {
+    return mutate((db) => {
+      if (countBy(db, "categoryId", categoryId) > 0) throw fail("In use", 409);
+      db.categories = db.categories.filter((c) => c.id !== categoryId);
+      db.subcategories = db.subcategories.filter(
+        (s) => s.categoryId !== categoryId,
+      );
+      return null;
     });
   },
   async createSubcategory(categoryId, name) {
     return mutate((db) => {
+      if (
+        db.subcategories.some(
+          (s) =>
+            s.categoryId === categoryId &&
+            s.name.toLowerCase() === name.toLowerCase(),
+        )
+      ) {
+        throw fail(`"${name}" already exists`, 409);
+      }
       const row = { id: id(), categoryId, name };
       db.subcategories.push(row);
       return row;
     });
   },
-  async createBrand(subcategoryId, name) {
+  async removeSubcategory(subcategoryId) {
     return mutate((db) => {
-      const row = { id: id(), subcategoryId, name };
-      db.brands.push(row);
+      if (countBy(db, "subcategoryId", subcategoryId) > 0)
+        throw fail("In use", 409);
+      db.subcategories = db.subcategories.filter((s) => s.id !== subcategoryId);
+      return null;
+    });
+  },
+};
+
+export const brands = {
+  async list() {
+    const db = read();
+    return db.brandsV2.map((brand) => ({
+      ...brand,
+      productCount: countBy(db, "brandId", brand.id),
+    }));
+  },
+  async create(data) {
+    return mutate((db) => {
+      if (
+        db.brandsV2.some(
+          (b) => b.name.toLowerCase() === data.name.toLowerCase(),
+        )
+      ) {
+        throw fail(`"${data.name}" already exists`, 409);
+      }
+      const row = { id: id(), logo: null, ...data };
+      db.brandsV2.push(row);
+      return { ...row, productCount: 0 };
+    });
+  },
+  async update(brandId, data) {
+    return mutate((db) => {
+      const row = db.brandsV2.find((b) => b.id === brandId);
+      if (!row) throw fail("Not found", 404);
+      Object.assign(row, data);
       return row;
     });
   },
-  async createModel(brandId, name) {
+  async remove(brandId) {
     return mutate((db) => {
-      const row = { id: id(), brandId, name };
-      db.models.push(row);
+      if (countBy(db, "brandId", brandId) > 0) throw fail("In use", 409);
+      db.brandsV2 = db.brandsV2.filter((b) => b.id !== brandId);
+      return null;
+    });
+  },
+};
+
+export const devices = {
+  async list() {
+    const db = read();
+    return db.devices
+      .map((device) => ({
+        ...device,
+        productCount: liveProducts(db).filter((p) =>
+          (p.deviceIds ?? []).includes(device.id),
+        ).length,
+      }))
+      .sort((a, b) => (a.maker + a.name).localeCompare(b.maker + b.name));
+  },
+  async create(data) {
+    return mutate((db) => {
+      if (
+        db.devices.some((d) => d.name.toLowerCase() === data.name.toLowerCase())
+      ) {
+        throw fail(`"${data.name}" already exists`, 409);
+      }
+      const row = { id: id(), maker: "", ...data };
+      db.devices.push(row);
+      return { ...row, productCount: 0 };
+    });
+  },
+  async update(deviceId, data) {
+    return mutate((db) => {
+      const row = db.devices.find((d) => d.id === deviceId);
+      if (!row) throw fail("Not found", 404);
+      Object.assign(row, data);
       return row;
+    });
+  },
+  async remove(deviceId) {
+    return mutate((db) => {
+      // Removing a device only removes it from compatibility lists — the
+      // products themselves are untouched.
+      for (const product of db.products) {
+        product.deviceIds = (product.deviceIds ?? []).filter(
+          (d) => d !== deviceId,
+        );
+      }
+      db.devices = db.devices.filter((d) => d.id !== deviceId);
+      return null;
     });
   },
 };
 
 export const suppliers = {
   async list() {
-    return read().suppliers;
+    const db = read();
+    return db.suppliers.map((supplier) => ({
+      ...supplier,
+      productCount: countBy(db, "supplierId", supplier.id),
+    }));
   },
-  async create(name) {
+  async create(data) {
+    const payload = typeof data === "string" ? { name: data } : data;
     return mutate((db) => {
-      const row = { id: id(), name };
+      if (
+        db.suppliers.some(
+          (s) => s.name.toLowerCase() === payload.name.toLowerCase(),
+        )
+      ) {
+        throw fail(`"${payload.name}" already exists`, 409);
+      }
+      const row = {
+        id: id(),
+        phone: "",
+        contactPerson: "",
+        note: "",
+        ...payload,
+      };
       db.suppliers.push(row);
+      return { ...row, productCount: 0 };
+    });
+  },
+  async update(supplierId, data) {
+    return mutate((db) => {
+      const row = db.suppliers.find((s) => s.id === supplierId);
+      if (!row) throw fail("Not found", 404);
+      Object.assign(row, data);
       return row;
+    });
+  },
+  async remove(supplierId) {
+    return mutate((db) => {
+      if (countBy(db, "supplierId", supplierId) > 0) throw fail("In use", 409);
+      db.suppliers = db.suppliers.filter((s) => s.id !== supplierId);
+      return null;
     });
   },
 };
@@ -508,7 +769,7 @@ export const sales = {
       // must not sell at yesterday's price.
       const subtotal = lines.reduce(
         (sum, line) => sum + line.product.sellPrice * line.qty,
-        0
+        0,
       );
 
       let discountAmount = 0;
@@ -587,7 +848,12 @@ export const banks = {
   },
   async create(data) {
     return mutate((db) => {
-      const row = { id: id(), active: true, sortOrder: db.banks.length + 1, ...data };
+      const row = {
+        id: id(),
+        active: true,
+        sortOrder: db.banks.length + 1,
+        ...data,
+      };
       db.banks.push(row);
       return row;
     });
@@ -646,10 +912,14 @@ export const expenses = {
 
 export const employees = {
   async list() {
-    return read().employees.slice().sort((a, b) => Number(b.active) - Number(a.active));
+    return read()
+      .employees.slice()
+      .sort((a, b) => Number(b.active) - Number(a.active));
   },
   async get(employeeId) {
-    const person = read().employees.find((e) => String(e.id) === String(employeeId));
+    const person = read().employees.find(
+      (e) => String(e.id) === String(employeeId),
+    );
     if (!person) throw fail("Not found", 404);
     return person;
   },
@@ -671,7 +941,9 @@ export const employees = {
   },
   async update(employeeId, data) {
     return mutate((db) => {
-      const person = db.employees.find((e) => String(e.id) === String(employeeId));
+      const person = db.employees.find(
+        (e) => String(e.id) === String(employeeId),
+      );
       if (!person) throw fail("Not found", 404);
       Object.assign(person, data);
       return person;
@@ -687,7 +959,11 @@ export const attendance = {
     const db = read();
     return db.attendance
       .filter((row) => within(`${row.date}T12:00:00`, range))
-      .filter((row) => !params?.employeeId || String(row.employeeId) === String(params.employeeId))
+      .filter(
+        (row) =>
+          !params?.employeeId ||
+          String(row.employeeId) === String(params.employeeId),
+      )
       .sort((a, b) => b.date.localeCompare(a.date));
   },
   async update(recordId, data) {
@@ -695,7 +971,8 @@ export const attendance = {
       const row = db.attendance.find((a) => a.id === recordId);
       if (!row) throw fail("Not found", 404);
       Object.assign(row, data);
-      if (row.clockIn) row.lateMinutes = minutesLate(row.scheduledStart, row.clockIn);
+      if (row.clockIn)
+        row.lateMinutes = minutesLate(row.scheduledStart, row.clockIn);
       return row;
     });
   },

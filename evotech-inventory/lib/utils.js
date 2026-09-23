@@ -13,11 +13,20 @@ export function money(amount, opts) {
   const decimals = opts?.decimals ?? true;
   return (
     CURRENCY_SYMBOL +
-    amount.toLocaleString("en-US", {
+    (amount ?? 0).toLocaleString("en-US", {
       minimumFractionDigits: decimals ? 2 : 0,
       maximumFractionDigits: decimals ? 2 : 0,
     })
   );
+}
+
+/** Digits in the mono face, the lari mark in the UI face. See .cur in CSS. */
+export function amount(value, opts) {
+  const decimals = opts?.decimals ?? true;
+  return (value ?? 0).toLocaleString("en-US", {
+    minimumFractionDigits: decimals ? 2 : 0,
+    maximumFractionDigits: decimals ? 2 : 0,
+  });
 }
 
 export function compactMoney(amount) {

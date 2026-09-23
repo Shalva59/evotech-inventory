@@ -131,69 +131,120 @@ otherwise.
 
 ---
 
-## 3. Products
+## 3. Catalogue
+
+The shop sells accessories and repair parts, not phones, so there are two
+separate ideas of "brand":
+
+- **Brand** — who made the accessory (Spigen, Baseus). Not tied to category.
+- **Device** — what it fits (iPhone 15, Galaxy S24). A product fits many,
+  one, or none.
+
+### Products
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/products?search=&lowStock=true` | `search` matches name, barcode or SKU. `lowStock=true` returns `quantity <= min_stock_threshold`. |
-| `GET` | `/products/lookup?code=…` | Exact barcode or SKU, else a single name match. `404` if nothing. **The till calls this on every scan — keep it under 50ms.** |
-| `POST` | `/products` | Body below. Also writes `activity` kind `product_added`. |
-| `PATCH` | `/products/:id` | Partial. A quantity increase should also write `activity` kind `stock_in`. |
-| `DELETE` | `/products/:id` | Set `archived = true` rather than deleting; past `sale_items` reference it. |
+| `GET` | `/products?search=&categoryId=&subcategoryId=&brandId=&lowStock=true` | `search` matches name, barcode, SKU, brand name **and compatible device names** — typing "iPhone 15" must return every case and glass that fits it. |
+| `GET` | `/products/:id` | Single |
+| `GET` | `/products/lookup?code=…` | Exact barcode or SKU, else a single name match. `404` if nothing. **Called on every scan — keep it under 50ms.** |
+| `POST` | `/products` | `409` on duplicate live barcode. Writes `activity` kind `product_added`. |
+| `PATCH` | `/products/:id` | Partial. `deviceIds`, if present, replaces the whole list. |
+| `DELETE` | `/products/:id` | Set `archived = true`. Past `sale_items` still reference it. |
+| `POST` | `/products/:id/receive` | Goods arriving — see below. |
 
-Product shape:
+Product shape (both ids and display names, so tables need no second call):
 
 ```json
 {
   "id": "…",
-  "name": "iPhone 13 Pro Screen",
-  "barcode": "4820019001",
-  "sku": "SCR-IP13P",
-  "category": "Spare parts",
-  "subcategory": "Screens",
-  "brand": "Apple",
-  "model": "iPhone 13 Pro",
-  "categoryId": "…", "subcategoryId": "…", "brandId": "…", "modelId": "…",
-  "costPrice": 180.00,
-  "sellPrice": 260.00,
-  "quantity": 1,
+  "name": "Spigen Ultra Hybrid iPhone 15",
+  "barcode": "8809896747301",
+  "sku": null,
+  "categoryId": "…", "category": "Cases",
+  "subcategoryId": "…", "subcategory": "Clear cases",
+  "brandId": "…", "brand": "Spigen", "brandLogo": "https://…",
+  "supplierId": "…", "supplier": "TechDist",
+  "deviceIds": ["…", "…"],
+  "devices": [ { "id": "…", "name": "iPhone 15", "maker": "Apple" } ],
+  "costPrice": 25.00,
+  "sellPrice": 45.00,
+  "quantity": 20,
   "minStockThreshold": 3,
-  "supplierId": "…",
   "imageUrl": null
 }
 ```
 
-Return both the ids (the form needs them) and the plain names (the tables show
-them). One join saved on every render.
-
-### `GET /classification`
-
-The whole tree in one call — the add-product form cascades through it in
-memory rather than making four round trips while the user is typing.
+### `POST /products/:id/receive`
 
 ```json
-[
-  {
-    "id": "…", "name": "Spare parts",
-    "subcategories": [
-      {
-        "id": "…", "name": "Screens",
-        "brands": [
-          { "id": "…", "name": "Apple",
-            "models": [ { "id": "…", "name": "iPhone 13 Pro" } ] }
-        ]
-      }
-    ]
-  }
-]
+{ "qty": 10, "unitCost": 30.00, "supplierId": "…", "recordExpense": true }
 ```
 
-`POST /classification/categories`, `/subcategories`, `/brands`, `/models` each
-take `{ name }` plus the parent id and return the created row.
+In one transaction:
 
-### `GET /suppliers`, `POST /suppliers`
+1. `cost_price` becomes the **weighted average**:
+   `(onHand × oldCost + qty × unitCost) / (onHand + qty)`, where `onHand` is
+   `max(0, quantity)`. A cheaper second batch must not make the first batch
+   look cheap too.
+2. `quantity += qty`. If `supplierId` is given, it becomes the product's
+   supplier.
+3. Insert a `stock_receipts` row.
+4. If `recordExpense`, insert an `expenses` row: type `stock`, description
+   `"<name> × <qty>"`, amount `qty × unitCost`, `paid_to` the supplier name.
+   Store its id on the receipt. The owner unticks this when goods came on
+   credit — the expense is recorded later, when actually paid.
+5. `activity` row, kind `stock_in`.
 
-`{ id, name, phone, note }`.
+Returns the updated product.
+
+### Categories
+
+| Method | Path | Body / notes |
+|---|---|---|
+| `GET` | `/categories` | Sorted by `sortOrder`, each with `icon`, `color`, `productCount` and nested `subcategories` (each with its own `productCount`) |
+| `POST` | `/categories` | `{ name, description?, image?, icon?, color? }` · `409` on duplicate name |
+| `PATCH` | `/categories/:id` | Partial. Reordering tiles sends `{ sortOrder }` for each category. |
+| `DELETE` | `/categories/:id` | `409` if any live product uses it |
+| `POST` | `/categories/:id/subcategories` | `{ name }` |
+| `DELETE` | `/subcategories/:id` | `409` if in use |
+
+### Brands
+
+| Method | Path | Body / notes |
+|---|---|---|
+| `GET` | `/brands` | Each with `productCount` |
+| `POST` | `/brands` | `{ name, logo? }` · `409` on duplicate name |
+| `PATCH` | `/brands/:id` | Partial |
+| `DELETE` | `/brands/:id` | `409` if in use |
+
+### Devices
+
+| Method | Path | Body / notes |
+|---|---|---|
+| `GET` | `/devices` | Sorted by maker then name, each with `productCount` |
+| `POST` | `/devices` | `{ name, maker }` · `409` on duplicate name |
+| `PATCH` | `/devices/:id` | Partial |
+| `DELETE` | `/devices/:id` | Always allowed — cascades out of `product_devices` only |
+
+### Suppliers
+
+| Method | Path | Body / notes |
+|---|---|---|
+| `GET` | `/suppliers` | Each with `productCount` |
+| `POST` | `/suppliers` | `{ name, phone?, contactPerson?, note? }` |
+| `PATCH` | `/suppliers/:id` | Partial |
+| `DELETE` | `/suppliers/:id` | `409` if in use |
+
+`icon` and `color` are short keys from fixed sets the frontend owns
+(`headphones`, `cable`, `plugZap`, … and `brass`, `jade`, `teal`, …). Store
+them as plain text; the backend never needs to know what they mean.
+
+### Images
+
+`image`, `logo` and `imageUrl` arrive from the frontend as small data URLs
+(256px WebP, typically 10–20 KB). Either store them as-is in the text
+column — fine at this size — or decode them to object storage and store the
+URL. The frontend renders whatever string comes back in `<img src>`.
 
 ---
 
@@ -408,7 +459,8 @@ If the backend is built in this order, the frontend comes alive in useful
 pieces rather than all at once at the end:
 
 1. `POST /auth/pin`, `GET /auth/me`, `GET /settings` — sign-in works
-2. `/products`, `/products/lookup`, `/classification` — inventory and scanning
+2. `/categories`, `/brands`, `/devices`, `/suppliers`, `/products` — the catalogue
+   and scanning
 3. `/banks`, `POST /sales` — the till can take money
 4. `/reports/*` — the dashboard fills in
 5. `/expenses` — real profit

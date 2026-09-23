@@ -46,6 +46,16 @@
     line-height: 1.5;
   }
 
+  /* JetBrains Mono has no lari sign, so ₾ falls back to whatever the system
+     offers and lands at a different weight and baseline than the digits beside
+     it. Setting the currency mark in the UI face keeps the pair consistent. */
+  .cur {
+    font-family: theme("fontFamily.sans");
+    margin-right: 0.12em;
+    opacity: 0.55;
+    font-size: 0.92em;
+  }
+
   /* Numbers line up in columns everywhere — non-negotiable in a POS. */
   .tnum {
     font-variant-numeric: tabular-nums;
