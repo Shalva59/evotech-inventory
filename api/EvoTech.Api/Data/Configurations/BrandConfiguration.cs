@@ -14,14 +14,9 @@ public class BrandConfiguration : IEntityTypeConfiguration<Brand>
             .IsRequired()
             .HasMaxLength(100);
 
-        // One 'Apple' in the whole database — the point of a global brand.
-        // Note this is CASE-SENSITIVE: 'Apple' and 'apple' are both allowed.
         builder.HasIndex(b => b.Name)
             .IsUnique();
 
-        // The C# property already defaults to true. Setting it here too means
-        // a row inserted by raw SQL — a seed script, a manual fix in psql —
-        // also gets true instead of failing on a NOT NULL with no value.
         builder.Property(b => b.IsActive)
             .HasDefaultValue(true);
     }

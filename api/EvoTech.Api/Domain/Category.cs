@@ -1,4 +1,4 @@
-﻿namespace EvoTech.Api.Domain;
+namespace EvoTech.Api.Domain;
 
 public class Category
 {

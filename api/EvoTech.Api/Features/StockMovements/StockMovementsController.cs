@@ -7,11 +7,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvoTech.Api.Features.StockMovements;
 
-/// <summary>
-/// The stock ledger. Note what is missing: no PUT, no PATCH, no DELETE.
-/// Movements are append-only — a mistake is corrected by recording a
-/// compensating Adjustment, never by editing history.
-/// </summary>
 [Route("api/v1/stock-movements")]
 public class StockMovementsController(AppDbContext db) : ApiController
 {
@@ -27,9 +22,6 @@ public class StockMovementsController(AppDbContext db) : ApiController
         if (productId is { } pid)
             query = query.Where(m => m.ProductId == pid);
 
-        // Half-open range: from inclusive, to exclusive. Never BETWEEN on
-        // timestamps — it silently excludes everything after midnight on the
-        // final day.
         if (from is { } f) query = query.Where(m => m.OccurredAt >= f);
         if (to is { } t) query = query.Where(m => m.OccurredAt < t);
 
@@ -64,8 +56,6 @@ public class StockMovementsController(AppDbContext db) : ApiController
     {
         if (await ValidateAsync(request, ct) is { } problem) return problem;
 
-        // Quantity arrives positive; Kind (and Direction, for an adjustment)
-        // determines the sign that actually gets stored.
         var signed = request.Kind switch
         {
             StockMovementKind.Purchase => request.Quantity,
@@ -75,16 +65,8 @@ public class StockMovementsController(AppDbContext db) : ApiController
             _ => request.Quantity
         };
 
-        // ---- Everything below runs in one transaction ----
-        // Checking stock and then inserting is a classic race: two concurrent
-        // sales both read 5, both decide -3 is fine, and the product lands at
-        // -1. A SELECT before an INSERT proves nothing on its own.
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        // FOR UPDATE takes a row lock on the product for the life of the
-        // transaction. A second request touching the SAME product blocks here
-        // until this one commits, so the two serialize. Movements for other
-        // products are unaffected — the lock is per row, not per table.
         var product = await db.Products
             .FromSql($"SELECT * FROM products WHERE id = {request.ProductId} FOR UPDATE")
             .Select(p => new { p.Id, p.Name })
@@ -99,8 +81,6 @@ public class StockMovementsController(AppDbContext db) : ApiController
 
         if (signed < 0)
         {
-            // Safe to read now: the row lock guarantees nobody else is
-            // inserting movements for this product concurrently.
             var onHand = await db.StockMovements
                 .Where(m => m.ProductId == request.ProductId)
                 .SumAsync(m => (int?)m.Quantity, ct) ?? 0;
@@ -119,12 +99,9 @@ public class StockMovementsController(AppDbContext db) : ApiController
             ProductId = request.ProductId,
             Quantity = signed,
             Kind = request.Kind,
-            // Default to now when the caller does not say otherwise.
             OccurredAt = request.OccurredAt ?? DateTimeOffset.UtcNow,
             UnitCost = request.UnitCost,
             Note = request.Note?.Trim()
-            // CreatedAt is deliberately not set — the database default now()
-            // fills it, and ValueGeneratedOnAdd reads it back.
         };
 
         db.StockMovements.Add(movement);
