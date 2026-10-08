@@ -128,6 +128,37 @@ No authentication yet — everything is open.
 
 ---
 
+## Keeping it up to date
+
+Lasha changes the API regularly. After every `git pull`, from the
+`evotech-inventory` folder (the frontend one, where you already run npm):
+
+```bash
+npm run api
+```
+
+That rebuilds the API with his latest code, applies any database changes, and
+starts it in the background. Takes a few seconds once the first build is done.
+
+| Command | What it does |
+|---|---|
+| `npm run api` | Rebuild and start the backend |
+| `npm run api:logs` | Watch the backend logs (Ctrl+C to stop watching) |
+| `npm run api:stop` | Stop it, keep the data |
+| `npm run api:reset` | Stop it and **delete the database** |
+
+Your data survives `npm run api` and `npm run api:stop`. Only `api:reset`
+deletes it.
+
+**Restarting the container from the Docker Desktop UI does not pick up new
+code.** A container runs an *image*, and the image is a snapshot taken when it
+was built — restarting re-runs the same snapshot. `npm run api` rebuilds it.
+That is the whole difference, and it is the one thing to remember.
+
+The raw commands, if you prefer them, are in the table at the bottom.
+
+---
+
 ## Stopping and restarting
 
 | What you want | Command |

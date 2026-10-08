@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "api": "docker compose -f ../api/EvotechDatabase/docker-compose.yml up --build -d",
+    "api:logs": "docker compose -f ../api/EvotechDatabase/docker-compose.yml logs -f",
+    "api:stop": "docker compose -f ../api/EvotechDatabase/docker-compose.yml down",
+    "api:reset": "docker compose -f ../api/EvotechDatabase/docker-compose.yml down -v"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.0",
