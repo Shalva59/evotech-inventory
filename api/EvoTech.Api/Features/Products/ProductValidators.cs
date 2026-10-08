@@ -2,17 +2,8 @@ using FluentValidation;
 
 namespace EvoTech.Api.Features.Products;
 
-/// <summary>
-/// Shared rules. Create and Update accept the same fields, so the rules live
-/// in one place rather than being copied and drifting apart.
-///
-/// The parameters are IRuleBuilderInitial, not IRuleBuilder: Cascade() is an
-/// extension on the *initial* builder only — the one RuleFor() hands back
-/// before any rule has been chained onto it.
-/// </summary>
 internal static class ProductRules
 {
-    // numeric(12,2) — 12 digits total, 2 after the point.
     private const decimal MaxMoney = 9_999_999_999.99m;
 
     public static IRuleBuilderOptions<T, string> Sku<T>(IRuleBuilderInitial<T, string> rule) =>
@@ -32,10 +23,6 @@ internal static class ProductRules
         rule.Cascade(CascadeMode.Stop)
             .GreaterThanOrEqualTo(0).WithMessage($"{field} cannot be negative.")
             .LessThanOrEqualTo(MaxMoney).WithMessage($"{field} is too large.")
-            // The column is numeric(12,2). Postgres would silently ROUND a
-            // third decimal place rather than reject it, so 10.999 would
-            // quietly become 11.00. Better to refuse than to change the
-            // caller's number behind their back.
             .Must(v => decimal.Round(v, 2) == v)
                 .WithMessage($"{field} cannot have more than 2 decimal places.");
 

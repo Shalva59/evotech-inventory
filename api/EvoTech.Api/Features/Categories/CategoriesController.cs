@@ -10,14 +10,6 @@ namespace EvoTech.Api.Features.Categories;
 [Route("api/v1/categories")]
 public class CategoriesController(AppDbContext db) : ApiController
 {
-    /// <summary>
-    /// The whole tree, flat. The client assembles it from ParentId.
-    ///
-    /// Ordered by Depth then Name so parents always appear before their
-    /// children — which means a single pass is enough to build the tree
-    /// client-side, with no second lookup for a parent that has not been seen
-    /// yet.
-    /// </summary>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<CategoryResponse>>> GetAll(CancellationToken ct)
     {
@@ -47,16 +39,10 @@ public class CategoriesController(AppDbContext db) : ApiController
     {
         if (await ValidateAsync(request, ct) is { } problem) return problem;
 
-        // Depth is derived, never supplied by the client: a root is 0, and any
-        // other node is its parent's depth plus one. Computing it in exactly
-        // one place is what keeps it trustworthy.
         var depth = 0;
 
         if (request.ParentId is { } parentId)
         {
-            // Only Depth is needed, so select only Depth. Cast to int? so that
-            // "no such parent" and "parent at depth 0" stay distinguishable —
-            // without the cast, a missing row and a root parent both return 0.
             var parentDepth = await db.Categories
                 .Where(c => c.Id == parentId)
                 .Select(c => (int?)c.Depth)
@@ -102,13 +88,9 @@ public class CategoriesController(AppDbContext db) : ApiController
     {
         if (await ValidateAsync(request, ct) is { } problem) return problem;
 
-        // No projection here: this one has to be a TRACKED entity, because the
-        // change tracker is what turns an assignment into an UPDATE statement.
         var category = await db.Categories.SingleOrDefaultAsync(c => c.Id == id, ct);
         if (category is null) return NotFound(id);
 
-        // Renaming to the current name is a no-op, not an error. Returning
-        // early also avoids a pointless round trip.
         if (category.Name == request.Name)
             return Ok(new CategoryResponse(category.Id, category.ParentId, category.Name, category.Depth));
 
@@ -120,7 +102,6 @@ public class CategoriesController(AppDbContext db) : ApiController
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" })
         {
-            // Same unique index as on insert — a sibling already has this name.
             return DuplicateSibling(request.Name);
         }
 
