@@ -8,8 +8,11 @@ export const ka = {
     expenses: "ხარჯები",
     employees: "თანამშრომლები",
     attendance: "დასწრება",
+    testpage: "სატესტო",
+     testpage2: "სატესტო2",
     settings: "პარამეტრები",
     signOut: "გასვლა",
+    brandstest: "ბრენდების ტესტი",
   },
 
   range: {

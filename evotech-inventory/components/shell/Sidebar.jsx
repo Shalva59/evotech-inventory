@@ -9,6 +9,7 @@ import {
   Receipt,
   Users,
   Clock3,
+  FlaskConical,
   Wrench,
   Settings,
   LogOut,
@@ -24,10 +25,14 @@ const NAV = [
   { href: "/expenses", key: "expenses", icon: Receipt },
   { href: "/employees", key: "employees", icon: Users },
   { href: "/attendance", key: "attendance", icon: Clock3 },
-];
+  { href: "/testpage", key: "testpage", icon: FlaskConical },
+  { href: "/testpage2", key: "testpage2", icon: Receipt },
+  { href: "/brandstest", key: "brandstest", icon: Receipt },
+];  
 
 export function Sidebar() {
   const pathname = usePathname();
+  
   const { t, lang, setLang } = useI18n();
   const { user, signOut } = useAuth();
 

@@ -36,6 +36,11 @@ export default function BrandsPage() {
     return q ? rows.filter((b) => b.name.toLowerCase().includes(q)) : rows;
   }, [list.data, query]);
 
+
+
+
+
+  
   return (
     <>
       <PageHeader

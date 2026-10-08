@@ -1,3 +1,5 @@
+import { brands } from "../api";
+
 export const en = {
   brand: { name: "EVOTECH", tagline: "Store operations" },
 
@@ -8,8 +10,11 @@ export const en = {
     expenses: "Expenses",
     employees: "Employees",
     attendance: "Attendance",
+    testpage: "Test page",
+    testpage2: "Test page 2",
     settings: "Settings",
     signOut: "Sign out",
+    brandstest: "Brands Test",
   },
 
   range: {
