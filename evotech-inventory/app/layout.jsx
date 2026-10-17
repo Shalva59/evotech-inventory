@@ -1,4 +1,5 @@
 import { Archivo, JetBrains_Mono, Noto_Sans_Georgian } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Providers } from "./providers";
 import "./globals.css";
 

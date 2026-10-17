@@ -6,24 +6,23 @@ import { useEffect, useMemo, useState } from "react";
 
 const Page = () => {
 
-  const [color, setColor] = useState(true);
-  const [changeActive, setchangeActive] = useState(true);
 
 
-  const startItems = [
-    { id: 1, name: "Nike", isActive: false },
-    { id: 2, name: "Adidas", isActive: true },
-    { id: 3, name: "Puma", isActive: false },
-  ];
+const [items, setItems] = useState([
+  { id: 1, name: "Nike", isActive: false },
+  { id: 2, name: "Adidas", isActive: true },
+  { id: 3, name: "Puma", isActive: false },
+]);
+
+const [color, setColor] = useState(true);
 
 
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [clicked, setClicked] = useState(0);
-  const [show, setShow] = useState(false);
+ const allActive = items.every((item) => item.isActive);
+ console.log("All items active:", allActive);
+
 
   const fetchData = async () => {
+
     try {
       const response = await fetch("http://localhost:4000/api/v1/brands");
 
@@ -68,7 +67,7 @@ const Page = () => {
       const response = await fetch("http://localhost:4000/api/v1/brands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: brandName, isActive: isActive }), // Assuming new brands are active by default
+        body: JSON.stringify({ name: brandName,  isActive: isActive }), // Assuming new brands are active by default
       });
 
       // 201 = შეიქმნა, 400 = ვალიდაციის შეცდომა, 409 = ასეთი სახელი უკვე არსებობს
@@ -82,6 +81,9 @@ const Page = () => {
             : result?.detail || result?.title || `HTTP error! status: ${response.status}`;
         throw new Error(message);
       }
+
+
+      // console.log("IsActive :  "+ isActive);
 
       setPostResult(result);
       setBrandName("");
@@ -109,8 +111,8 @@ const Page = () => {
           style={{ border: "1px solid #999", padding: "6px", marginRight: "8px" }}
         />
         <input type="checkbox" checked={isActive} onChange={() => setIsActive(!isActive)} />
+        <label >IsActive :  {isActive ? "Active  " : "Inactive  "}</label>
 
-        <label htmlFor="isActive">IsActive</label>
 
         <button
           onClick={createBrand}
@@ -137,27 +139,17 @@ const Page = () => {
         (<h1 style={{ color: "red", fontSize: "30px" }}>Color is Red</h1>)}
 
 
+{/* ტექსტის შემოწმება true ა თუ არა  */}
+<input
+  type="checkbox"
+  checked={allActive}
+  onChange={() => {
+    const newValue = !allActive;
+    setItems(items.map((item) => ({ ...item, isActive: newValue })));
+  }}
+/> Select all
 
-
-      <input type="checkbox" checked={changeActive} onChange={() => {
-        setchangeActive(!changeActive)
-
-        let startItemsReturn = null;
-
-        startItems?.map((item) => {
-
-          item.isActive = changeActive ? true : false;
-
-          console.log(item.name + "  ,  " + item.isActive);
-
-        })
-
-        return startItemsReturn = startItems;
-
-      }} /> Sellect all
-
-      {startItems.map((item) => {
-
+{items.map((item) => {
         return (
 
 

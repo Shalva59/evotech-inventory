@@ -88,10 +88,34 @@ async function request(path, { method = "GET", body, params, signal } = {}) {
 
   if (!res.ok) {
     if (res.status === 401) setToken(null);
-    throw new ApiError(payload?.message || res.statusText, res.status, payload);
+    throw new ApiError(problemMessage(payload) || res.statusText, res.status, payload);
   }
 
   return payload;
+}
+
+/**
+ * შეცდომის ტექსტის ამოღება სერვერის პასუხიდან.
+ *
+ * .NET API შეცდომას ასეთი ფორმით აბრუნებს (problem+json):
+ *   {
+ *     "title": "One or more validation errors occurred.",
+ *     "status": 400,
+ *     "errors": { "Name": ["Brand name is required."] }
+ *   }
+ *
+ * ეს ფუნქცია იქიდან გასაგებ ტექსტს იღებს, რომ ეკრანზე
+ * „Brand name is required.“ გამოჩნდეს და არა უბრალოდ „Bad Request“.
+ */
+function problemMessage(payload) {
+  // პასუხი ცარიელია ან JSON არ არის — ტექსტი არ გვაქვს
+  if (!payload || typeof payload !== "object") return null;
+  // ძველი ფორმატი: { "message": "..." }
+  if (payload.message) return payload.message;
+  // ველების შეცდომები: { "errors": { "Name": ["..."], ... } } → ყველას ერთ ხაზად ვაერთებთ
+  if (payload.errors) return Object.values(payload.errors).flat().join(" ");
+  // დანარჩენ შემთხვევებში — "detail" ან "title"
+  return payload.detail || payload.title || null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -150,11 +174,82 @@ const remote_categories = {
 };
 
 /** Accessory makers — Spigen, Baseus. Not tied to any category. */
+/**
+ * ბრენდები — .NET API-სთან კავშირი (/api/v1/brands)
+ * ─────────────────────────────────────────────────
+ * ბრენდები ყოველთვის რეალურ სერვერზე მიდის, დემო რეჟიმშიც
+ * (NEXT_PUBLIC_DEMO=true), რადგან ბრენდები აუცილებლად API-ში უნდა ინახებოდეს.
+ *
+ * რა აქვს API-ს ახლა:
+ *   GET  /api/v1/brands        — სია
+ *   POST /api/v1/brands        — ახლის შექმნა  { name, isActive }
+ *   GET  /api/v1/brands/{id}   — ერთი ბრენდი
+ * შეცვლა (PUT) და წაშლა (DELETE) ჯერ არ არის.
+ *
+ * ლოგო: API-ს ლოგოს ველი ჯერ არ აქვს, ამიტომ სურათს ბრაუზერში
+ * (localStorage) ვინახავთ ბრენდის id-ის მიხედვით.
+ * ⚠ ლოგო ჩანს მხოლოდ ამ ბრაუზერში — სხვა კომპიუტერზე არა.
+ * როცა ბექენდს "logo" ველი დაემატება: create-ში body-ში logo ჩაამატე
+ * და readBrandLogos / saveBrandLogo წაშალე.
+ */
+
+// localStorage-ის გასაღები, რომლის ქვეშაც ლოგოები ინახება.
+// შიგნით ასე გამოიყურება: { "15": "data:image/png;base64,...", "16": "..." }
+const BRAND_LOGOS_KEY = "evotech.brandLogos";
+
+/** ყველა შენახული ლოგოს წაკითხვა ბრაუზერიდან. */
+function readBrandLogos() {
+  // სერვერზე (Next.js-ის რენდერისას) window არ არსებობს
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(BRAND_LOGOS_KEY)) ?? {};
+  } catch {
+    // ჩანაწერი დაზიანებულია ან წვდომა დაბლოკილია — ვაბრუნებთ ცარიელს
+    return {};
+  }
+}
+
+/** ერთი ბრენდის ლოგოს შენახვა (ან წაშლა, თუ logo ცარიელია). */
+function saveBrandLogo(id, logo) {
+  if (typeof window === "undefined") return;
+  const logos = readBrandLogos();
+  if (logo) logos[id] = logo;
+  else delete logos[id];
+  try {
+    window.localStorage.setItem(BRAND_LOGOS_KEY, JSON.stringify(logos));
+  } catch {
+    // მეხსიერება გაივსო — ბრენდი სერვერზე მაინც შეინახა, იკარგება მხოლოდ ლოგო.
+  }
+}
+
 const remote_brands = {
-  list: () => request("/brands"),
-  create: (data) => request("/brands", { method: "POST", body: data }),
-  update: (id, data) => request(`/brands/${id}`, { method: "PATCH", body: data }),
-  remove: (id) => request(`/brands/${id}`, { method: "DELETE" }),
+  /**
+   * ბრენდების სია.
+   * GET /api/v1/brands?includeInactive=true
+   * includeInactive=true — მის გარეშე API მხოლოდ აქტიურებს აბრუნებს,
+   * ჩვენ კი გამორთულებიც გვჭირდება, რომ ცალკე სექციაში ვაჩვენოთ.
+   */
+  async list() {
+    const rows = await request("/v1/brands", { params: { includeInactive: true } });
+    const logos = readBrandLogos();
+    // თითოეულ ბრენდს ვამატებთ მის ლოგოს ბრაუზერიდან (თუ აქვს)
+    return rows.map((brand) => ({ ...brand, logo: logos[brand.id] ?? null }));
+  },
+
+  /**
+   * ახალი ბრენდის შექმნა.
+   * POST /api/v1/brands   body: { "name": "...", "isActive": true }
+   * სერვერი აბრუნებს შექმნილ ბრენდს id-ით: { id, name, isActive }.
+   * ამ id-ით ლოგოს ბრაუზერში ვინახავთ.
+   */
+  async create({ name, isActive, logo }) {
+    const brand = await request("/v1/brands", {
+      method: "POST",
+      body: { name, isActive }, // ლოგო არ იგზავნება — API-ს ეს ველი ჯერ არ აქვს
+    });
+    saveBrandLogo(brand.id, logo);
+    return { ...brand, logo: logo ?? null };
+  },
 };
 
 /** The phones and laptops a product fits. Many-to-many with products. */
@@ -275,7 +370,8 @@ export const auth = DEMO ? local.auth : remote_auth;
 export const reports = DEMO ? local.reports : remote_reports;
 export const products = DEMO ? local.products : remote_products;
 export const categories = DEMO ? local.categories : remote_categories;
-export const brands = DEMO ? local.brands : remote_brands;
+// ბრენდები დემო რეჟიმს არ ემორჩილება — ყოველთვის რეალური API (იხ. remote_brands ზემოთ)
+export const brands = remote_brands;
 export const devices = DEMO ? local.devices : remote_devices;
 export const suppliers = DEMO ? local.suppliers : remote_suppliers;
 export const sales = DEMO ? local.sales : remote_sales;

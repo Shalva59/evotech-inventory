@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Pencil, Plus, Search, Tag, Trash2 } from "lucide-react";
+import { Loader2, Plus, Search, Tag } from "lucide-react";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { CatalogNav } from "@/components/inventory/CatalogNav";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { ImagePicker } from "@/components/ui/image-picker";
@@ -16,37 +16,65 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
- * A brand here is two facts: what it is called and what its logo looks like.
- * Country, website and a description were in the way — nobody in a shop looks
- * any of them up mid-sale, and every extra field is one more blank box facing
- * whoever is entering twenty brands in a row.
+ * ბრენდების გვერდი  (/inventory/brands)
+ * ═════════════════════════════════════
+ * ბრენდს სამი რამ აქვს: სახელი, ლოგო და აქტიურია თუ არა.
+ *
+ * როგორ მუშაობს:
+ *   1. გვერდის გახსნისას → GET /api/v1/brands  (სია მოდის სერვერიდან)
+ *   2. „ბრენდის დამატება“ → იხსნება ფორმა (BrandModal)
+ *   3. „შენახვა“ → POST /api/v1/brands  →  შემდეგ ისევ GET (სია ახლდება)
+ *   4. ბრენდები იყოფა ორ სექციად: „აქტიური“ და „გამორთული“
+ *
+ * სერვერთან ყველა მოთხოვნა lib/api.js-შია (brandsApi), აქ fetch არ იწერება.
+ * რედაქტირება და წაშლა არ არის, რადგან API-ს PUT / DELETE ჯერ არ აქვს.
+ *
+ * კომპონენტები ამ ფაილში:
+ *   BrandsPage — მთავარი გვერდი (სია, ძებნა, სექციები)
+ *   BrandCard  — ერთი ბრენდის ბარათი
+ *   BrandModal — ახალი ბრენდის დამატების ფორმა
  */
 export default function BrandsPage() {
-  const { t } = useI18n();
-  const router = useRouter();
-  const list = useApi(() => brandsApi.list(), []);
-  const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState(null);
-  const [deleting, setDeleting] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const { t } = useI18n(); // t("...") — თარგმანი lib/i18n/ka.js-დან
+  const router = useRouter(); // სხვა გვერდზე გადასასვლელად
 
+  // ბრენდების სია სერვერიდან.
+  // list.data    — ბრენდების მასივი: [{ id, name, isActive, logo }, ...]
+  // list.loading — იტვირთება თუ არა
+  // list.error   — შეცდომა, თუ მოხდა
+  // list.reload  — სიის თავიდან წამოღება (ახალი GET)
+  const list = useApi(() => brandsApi.list(), []);
+
+  const [query, setQuery] = useState(""); // ძებნის ველის ტექსტი
+  const [adding, setAdding] = useState(false); // ღიაა თუ არა დამატების ფორმა
+  const [notice, setNotice] = useState(null); // შეტყობინება გვერდის თავში
+
+  // ძებნით გაფილტრული ბრენდები (სახელში ვეძებთ, დიდ/პატარა ასოს არ აქვს მნიშვნელობა).
+  // useMemo — თავიდან ითვლება მხოლოდ მაშინ, როცა სია ან ძებნის ტექსტი იცვლება.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const rows = list.data ?? [];
     return q ? rows.filter((b) => b.name.toLowerCase().includes(q)) : rows;
   }, [list.data, query]);
 
+  // ბრენდების დაყოფა ორ სექციად:
+  //   "active"   — isActive: true  → „აქტიური ბრენდები“ (ზემოთ)
+  //   "inactive" — isActive: false → „გამორთული ბრენდები“ (ქვემოთ)
+  // ბოლო .filter() ცარიელ სექციას აშორებს — თუ გამორთული არც ერთია,
+  // „გამორთული ბრენდების“ სათაური საერთოდ არ გამოჩნდება.
+  const groups = [
+    { key: "active", title: t("catalog.brandsActive"), rows: visible.filter((b) => b.isActive) },
+    { key: "inactive", title: t("catalog.brandsInactive"), rows: visible.filter((b) => !b.isActive) },
+  ].filter((group) => group.rows.length > 0);
 
-
-
-
-  
   return (
     <>
+      {/* გვერდის თავი: სათაური, ტაბები (ნივთები / კატეგორიები / ბრენდები ...)
+          და „ბრენდის დამატება“ ღილაკი, რომელიც ფორმას ხსნის */}
       <PageHeader
         title={t("inventory.title")}
         actions={
-          <Button size="sm" onClick={() => setEditing({})}>
+          <Button size="sm" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" strokeWidth={2} />
             <span className="hidden sm:inline">{t("catalog.brandAdd")}</span>
           </Button>
@@ -62,6 +90,7 @@ export default function BrandsPage() {
           </p>
         )}
 
+        {/* ძებნის ველი — ჩნდება მხოლოდ მაშინ, როცა 8-ზე მეტი ბრენდია */}
         {(list.data?.length ?? 0) > 8 && (
           <div className="relative max-w-xs">
             <Search
@@ -77,6 +106,11 @@ export default function BrandsPage() {
           </div>
         )}
 
+        {/* Async თვითონ ირჩევს, რა აჩვენოს:
+              skeleton — სანამ იტვირთება (ნაცრისფერი ყუთები)
+              empty    — თუ ბრენდი ჯერ არ არის
+              შეცდომა  — თუ სერვერი არ პასუხობს
+              children — როცა სია მოვიდა */}
         <Async
           query={list}
           isEmpty={(data) => !data?.length}
@@ -94,7 +128,7 @@ export default function BrandsPage() {
                 title={t("catalog.brandsEmpty")}
                 hint={t("catalog.brandsEmptyHint")}
                 action={
-                  <Button size="sm" onClick={() => setEditing({})}>
+                  <Button size="sm" onClick={() => setAdding(true)}>
                     {t("catalog.brandAdd")}
                   </Button>
                 }
@@ -103,133 +137,145 @@ export default function BrandsPage() {
           }
         >
           {() => (
-            // Every logo sits in its own fixed square on the same neutral
-            // ground. Left to their own dimensions, a wide wordmark and a
-            // round badge make a grid look broken.
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-              {visible.map((brand) => {
-                const empty = brand.productCount === 0;
-                return (
-                  <article
-                    key={brand.id}
-                    className={cn(
-                      "group relative flex flex-col overflow-hidden rounded-lg border border-line bg-surface transition-colors",
-                      "hover:border-line-strong",
-                      empty && "opacity-60"
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/inventory?brandId=${brand.id}`)}
-                      className="flex flex-1 flex-col items-center gap-3 px-3 pb-3 pt-5"
-                    >
-                      <span className="flex h-16 w-full items-center justify-center rounded bg-bg/70 px-3">
-                        {brand.logo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={brand.logo}
-                            alt=""
-                            className="max-h-12 max-w-full object-contain"
-                          />
-                        ) : (
-                          <span className="text-lg font-semibold text-faint">
-                            {brand.name.slice(0, 2).toUpperCase()}
-                          </span>
-                        )}
-                      </span>
-                      <span className="w-full text-center">
-                        <span className="block truncate text-[13px] text-fg">{brand.name}</span>
-                        <span className="mt-0.5 block text-[11px] text-faint">
-                          {t("catalog.productsCount", { n: brand.productCount })}
-                        </span>
-                      </span>
-                    </button>
-
-                    <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button
-                        type="button"
-                        onClick={() => setEditing(brand)}
-                        className="flex h-7 w-7 items-center justify-center rounded bg-surface/90 text-faint hover:text-brass"
-                        aria-label={t("state.edit")}
-                      >
-                        <Pencil className="h-3.5 w-3.5" strokeWidth={1.8} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          brand.productCount > 0 ? setNotice(t("catalog.inUse")) : setDeleting(brand)
-                        }
-                        className="flex h-7 w-7 items-center justify-center rounded bg-surface/90 text-faint hover:text-danger"
-                        aria-label={t("state.remove")}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
+            <div className="space-y-6">
+              {groups.map((group) => (
+                // ერთი სექცია: სათაური + ბრენდების ბადე
+                <section key={group.key} className="space-y-3">
+                  {/* სექციის სათაური: ფერადი წერტილი (ოქროსფერი = აქტიური,
+                      წითელი = გამორთული), სახელი და რაოდენობა, მაგ. „აქტიური ბრენდები · 15“ */}
+                  <h2 className="flex items-center gap-2 text-[12px] font-medium uppercase tracking-wide text-faint">
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        group.key === "active" ? "bg-brass" : "bg-danger"
+                      )}
+                    />
+                    {group.title}
+                    <span className="text-faint/70">· {group.rows.length}</span>
+                  </h2>
+                  {/* ბრენდების ბადე. სვეტების რაოდენობა ეკრანის სიგანეზეა
+                      დამოკიდებული: ტელეფონზე 2, დიდ ეკრანზე 6.
+                      დაჭერისას → ინვენტარის გვერდი ამ ბრენდის პროდუქტებით */}
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+                    {group.rows.map((brand) => (
+                      <BrandCard
+                        key={brand.id}
+                        brand={brand}
+                        onOpen={() => router.push(`/inventory?brandId=${brand.id}`)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </Async>
       </main>
 
+      {/* დამატების ფორმა. onSaved={list.reload} — შენახვის შემდეგ
+          სია თავიდან მოდის სერვერიდან (ახალი GET) და ახალი ბრენდი ეგრევე ჩანს */}
       <BrandModal
-        open={editing !== null}
-        brand={editing?.id ? editing : null}
-        onClose={() => setEditing(null)}
+        open={adding}
+        onClose={() => setAdding(false)}
         onSaved={list.reload}
-      />
-
-      <ConfirmDialog
-        open={deleting !== null}
-        title={deleting?.name}
-        message={t("catalog.deleteConfirm")}
-        confirmLabel={t("state.remove")}
-        cancelLabel={t("state.back")}
-        danger
-        onCancel={() => setDeleting(null)}
-        onConfirm={async () => {
-          try {
-            await brandsApi.remove(deleting.id);
-          } catch {
-            setNotice(t("catalog.inUse"));
-          }
-          setDeleting(null);
-          list.reload();
-        }}
       />
     </>
   );
 }
 
-function BrandModal({ open, brand, onClose, onSaved }) {
+/**
+ * ერთი ბრენდის ბარათი.
+ *   brand  — { id, name, isActive, logo, productCount? }
+ *   onOpen — რა მოხდეს ბარათზე დაჭერისას
+ * ცალკე კომპონენტია, რომ ორივე სექციამ (აქტიური / გამორთული) ერთი და იგივე
+ * ბარათი გამოიყენოს და კოდი არ გამეორდეს.
+ */
+function BrandCard({ brand, onOpen }) {
   const { t } = useI18n();
-  const [name, setName] = useState("");
-  const [logo, setLogo] = useState(null);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(null);
+  // ბარათი მკრთალია, თუ ბრენდი გამორთულია ან მას ნივთი არ აქვს
+  const dim = !brand.isActive || brand.productCount === 0;
+  return (
+    <article
+      className={cn(
+        "group relative flex flex-col overflow-hidden rounded-lg border border-line bg-surface transition-colors",
+        "hover:border-line-strong",
+        dim && "opacity-60"
+      )}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex flex-1 flex-col items-center gap-3 px-3 pb-3 pt-5"
+      >
+        {/* ლოგოს ყუთი — ყველა ლოგო ერთი ზომის ყუთშია, რომ ბადე სწორი იყოს.
+            ლოგო თუ არ აქვს → სახელის პირველი ორი ასო (მაგ. Alta → „AL“) */}
+        <span className="flex h-16 w-full items-center justify-center rounded bg-bg/70 px-3">
+          {brand.logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logo} alt="" className="max-h-12 max-w-full object-contain" />
+          ) : (
+            <span className="text-lg font-semibold text-faint">
+              {brand.name.slice(0, 2).toUpperCase()}
+            </span>
+          )}
+        </span>
+        <span className="w-full text-center">
+          <span className="block truncate text-[13px] text-fg">{brand.name}</span>
+          {/* „N ნივთი“ — ჩანს მხოლოდ მაშინ, როცა API productCount-ს აბრუნებს
+              (ახლა არ აბრუნებს, ამიტომ არ ჩანს) */}
+          {brand.productCount != null && (
+            <span className="mt-0.5 block text-[11px] text-faint">
+              {t("catalog.productsCount", { n: brand.productCount })}
+            </span>
+          )}
+        </span>
+      </button>
+    </article>
+  );
+}
 
+/**
+ * ახალი ბრენდის დამატების ფორმა (ფანჯარა).
+ *   open    — ღიაა თუ არა
+ *   onClose — ფანჯრის დახურვა
+ *   onSaved — გამოიძახება წარმატებული შენახვის შემდეგ (გვერდზე ეს list.reload-ია)
+ */
+function BrandModal({ open, onClose, onSaved }) {
+  const { t } = useI18n();
+  const [name, setName] = useState(""); // ბრენდის სახელი (სავალდებულო)
+  const [logo, setLogo] = useState(null); // ლოგო — სურათი base64 ტექსტად
+  const [isActive, setIsActive] = useState(true); // აქტიურია თუ არა (თავიდან — კი)
+  const [pending, setPending] = useState(false); // იგზავნება თუ არა ახლა
+  const [error, setError] = useState(null); // შეცდომის ტექსტი ფორმის ქვემოთ
+
+  // ფორმის ყოველ გახსნაზე ველები სუფთავდება
   useEffect(() => {
     if (!open) return;
-    setName(brand?.name ?? "");
-    setLogo(brand?.logo ?? null);
+    setName("");
+    setLogo(null);
+    setIsActive(true);
     setError(null);
-  }, [open, brand]);
+  }, [open]);
 
+  // „შენახვის“ დაჭერისას:
   async function submit(event) {
-    event.preventDefault();
-    if (!name.trim()) return;
-    setPending(true);
+    event.preventDefault(); // ბრაუზერმა გვერდი არ გადატვირთოს
+    if (!name.trim()) return; // ცარიელი სახელით არ ვაგზავნით
+    setPending(true); // ღილაკი იბლოკება — ორჯერ რომ არ გაიგზავნოს
     setError(null);
     try {
-      if (brand) await brandsApi.update(brand.id, { name: name.trim(), logo });
-      else await brandsApi.create({ name: name.trim(), logo });
-      onSaved();
+      // 1) POST /api/v1/brands  { name, isActive }
+      const brand = await brandsApi.create({ name: name.trim(), isActive, logo });
+      // 2) სიის განახლება (ახალი GET) და ფანჯრის დახურვა
+      onSaved(brand);
       onClose();
     } catch (err) {
+      // შეცდომა ფორმაში ჩანს, ფანჯარა ღია რჩება.
+      // "NETWORK" — სერვერი გამორთულია ან მიუწვდომელია → „კავშირი არ არის“
+      // სხვა შემთხვევაში — სერვერის ტექსტი, მაგ. „Brand name is required.“
       setError(err.message === "NETWORK" ? t("state.offline") : err.message);
     } finally {
-      setPending(false);
+      setPending(false); // ღილაკი ისევ აქტიურდება
     }
   }
 
@@ -238,7 +284,7 @@ function BrandModal({ open, brand, onClose, onSaved }) {
       open={open}
       onClose={onClose}
       size="sm"
-      title={brand ? t("catalog.brandEdit") : t("catalog.brandAdd")}
+      title={t("catalog.brandAdd")}
       footer={
         <>
           {error && <span className="mr-auto text-[12px] text-danger">{error}</span>}
@@ -253,20 +299,34 @@ function BrandModal({ open, brand, onClose, onSaved }) {
       }
     >
       <form id="brand-form" onSubmit={submit} className="flex items-start gap-5 p-5">
+        {/* ლოგოს არჩევა (სურათის ატვირთვა) */}
         <ImagePicker
           label={t("catalog.logo")}
           value={logo}
           onChange={setLogo}
           className="w-[116px] shrink-0"
         />
-        <Field label={t("catalog.brandName")} required className="flex-1">
-          <Input
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder={t("catalog.brandNamePlaceholder")}
-          />
-        </Field>
+        <div className="flex flex-1 flex-col gap-4">
+          {/* სახელის ველი */}
+          <Field label={t("catalog.brandName")} required>
+            <Input
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t("catalog.brandNamePlaceholder")}
+            />
+          </Field>
+          {/* აქტიურია თუ არა — ჩექბოქსი. ტექსტი იცვლება: „აქტიური“ / „გამორთული“ */}
+          <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-fg">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(event) => setIsActive(event.target.checked)}
+              className="h-4 w-4 accent-brass"
+            />
+            {isActive ? t("catalog.brandActive") : t("catalog.brandInactive")}
+          </label>
+        </div>
       </form>
     </Modal>
   );
