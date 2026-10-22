@@ -128,6 +128,63 @@ No authentication yet — everything is open.
 
 ---
 
+## One-time: log in to the image registry
+
+The API is published as a prebuilt Docker image, so your machine never compiles
+C#. The image lives in GitHub Container Registry, and because the repository is
+private you have to authenticate once.
+
+1. Go to https://github.com/settings/tokens → **Generate new token (classic)**
+2. Give it a name, set an expiry, and tick **`read:packages`** — nothing else
+3. Copy the token
+4. Run this, replacing `YOUR-GITHUB-USERNAME`, and paste the token when asked
+   for a password:
+
+```bash
+docker login ghcr.io -u YOUR-GITHUB-USERNAME
+```
+
+Docker stores it, so this is a one-time step until the token expires.
+
+If `npm run api` ever fails with `denied` or `unauthorized`, the token has
+expired — repeat the steps above.
+
+## Keeping it up to date
+
+Lasha changes the API regularly. After every `git pull`, from the
+`evotech-inventory` folder (the frontend one, where you already run npm):
+
+```bash
+npm run api
+```
+
+That downloads the latest API image, applies any database changes, and starts
+it in the background. Takes seconds — no compiling happens on your machine.
+
+| Command | What it does |
+|---|---|
+| `npm run api` | Download the latest backend and start it |
+| `npm run api:logs` | Watch the backend logs (Ctrl+C to stop watching) |
+| `npm run api:stop` | Stop it, keep the data |
+| `npm run api:reset` | Stop it and **delete the database** |
+| `npm run api:build` | Build from source instead of downloading — rarely needed |
+
+Your data survives `npm run api` and `npm run api:stop`. Only `api:reset`
+deletes it.
+
+**Restarting the container from the Docker Desktop UI does not pick up new
+code.** A container runs an *image*, and the image is a snapshot taken when it
+was built — restarting re-runs the same snapshot. `npm run api` downloads the
+new one. That is the whole difference, and it is the one thing to remember.
+
+**The image is published when Lasha pushes to `main`**, and that takes a few
+minutes to build. If you pull a fix and still see the old behaviour, check that
+the build finished: https://github.com/Shalva59/evotech-inventory/actions
+
+The raw commands, if you prefer them, are in the table at the bottom.
+
+---
+
 ## Stopping and restarting
 
 | What you want | Command |

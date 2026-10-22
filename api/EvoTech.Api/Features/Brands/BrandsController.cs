@@ -44,9 +44,7 @@ public class BrandsController(AppDbContext db) : ApiController
     }
 
     [HttpPost]
-    public async Task<ActionResult<BrandResponse>> Create(
-        CreateBrandRequest request,
-        CancellationToken ct)
+    public async Task<ActionResult<BrandResponse>> Create(CreateBrandRequest request, CancellationToken ct)
     {
         if (await ValidateAsync(request, ct) is { } problem) return problem;
 
@@ -68,6 +66,26 @@ public class BrandsController(AppDbContext db) : ApiController
         var response = new BrandResponse(brand.Id, brand.Name, brand.IsActive);
 
         return CreatedAtAction(nameof(GetById), new { id = brand.Id }, response);
+    }
+
+    [HttpDelete("{id:long}")]
+    public async Task<ActionResult> Delete(long id, CancellationToken ct)
+    {
+        var brand = await db.Brands
+            .Where(b => b.Id == id)
+            .SingleOrDefaultAsync(ct);
+
+        if (brand is null)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound,
+                          title: "Brand not found",
+                          detail: $"No brand with id {id}.");
+        }
+
+        db.Brands.Remove(brand);
+        await db.SaveChangesAsync(ct);
+
+        return Ok();
     }
 
     private ObjectResult Conflict(string name) =>
